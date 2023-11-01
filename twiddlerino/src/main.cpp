@@ -6,7 +6,7 @@ static float ReadFloat();
 static int ReadInt();
 
 //Define Variables we'll be connecting to
-double target=0;
+double target = 0;
 double pos = 0;
 double last_pos = 0;
 double vel = 0;
@@ -16,6 +16,7 @@ int tmp=0;
 
 long updateInterval = 10; //send position value every 10 ms
 long last_time = 0; //last time we sent a position value
+long write_last_time = 5;
 
 //define initial p, i, and d values
 double p = 0.4;
@@ -53,7 +54,19 @@ void loop()
   long dt = t - last_time;
   if (dt >= updateInterval)
   {  
-    Serial.println((int)pos);
+    // Serial.println((int)pos);
+    // Send position immediately
+    int position = (int)pos;
+    bool isNegative = position < 0;
+    if (isNegative) {
+      position = abs(position); // If negative, make it positive for transmission
+    }
+    
+    // Send sign bit, low byte, and high byte immediately
+    byte signBit = isNegative ? 1 : 0;
+    Serial.write(signBit);
+    Serial.write(position & 0xFF);    // Low byte
+    Serial.write((position >> 8) & 0xFF); // High byte
     last_time = t;
   }
   
@@ -80,6 +93,15 @@ void loop()
   {
     myPID.SetTunings(p, i, d);
   }
+
+  // long write_dt = t - write_last_time;
+  // int receivedValue = target;
+  // if (write_dt >= updateInterval) {
+  //   if (Serial.available() > 0) {
+  //     receivedValue = ReadInt();
+  //   }
+  //   Serial.println(receivedValue);
+  // }
   
   //PID class handles its own update rate
   myPID.Compute();
