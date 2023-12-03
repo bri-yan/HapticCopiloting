@@ -34,6 +34,11 @@ PID myPID(&pos, &PWMOut, &target, p, i, d, REVERSE);
 //when passing p, i, d, and target updates
 int SERIAL_WRITE_LENGTH = 32;
 
+const int runningAverageLength = 50;
+int prevCurrentReadings[runningAverageLength];
+int runningAverageCounter = 0; 
+extern int motor_direction;
+
 void setup()
 {
   Serial.begin(115200);
@@ -43,10 +48,24 @@ void setup()
   myPID.SetMode(AUTOMATIC); //just need to call myPID.compute() and things will work
   myPID.SetSampleTime(1); //every 1 ms
   last_time = millis();
+
+  pinMode(A4, INPUT);
 }
 
 void loop()
 {
+  prevCurrentReadings[runningAverageCounter] = analogRead(A4);
+  if (motor_direction == 0) prevCurrentReadings[runningAverageCounter] *= -1;
+  ++runningAverageCounter;
+  if (runningAverageCounter == runningAverageLength) {
+    int currentAverage = 0;
+    for (int j = 0; j < runningAverageLength; ++j) {
+      currentAverage += prevCurrentReadings[j];
+    }
+    Serial.println(currentAverage);
+    runningAverageCounter = 0;
+  }
+
   pos = ReadEncoderFast();
    
   //Write position every updateInterval ms
@@ -64,9 +83,9 @@ void loop()
     
     // Send sign bit, low byte, and high byte immediately
     byte signBit = isNegative ? 1 : 0;
-    Serial.write(signBit);
-    Serial.write(position & 0xFF);    // Low byte
-    Serial.write((position >> 8) & 0xFF); // High byte
+    // Serial.write(signBit);
+    // Serial.write(position & 0xFF);    // Low byte
+    // Serial.write((position >> 8) & 0xFF); // High byte
     last_time = t;
   }
   

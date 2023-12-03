@@ -174,15 +174,18 @@ void SetPWMOut(int pwm_out)
   pwm_out = min(255, max(-255, pwm_out));
   if (pwm_out == 0)
   {
-    SetMotorDirection(MOTOR_LOW);
+    motor_direction = MOTOR_LOW;
+    SetMotorDirection(motor_direction);
   }
   else if (pwm_out < 0)
   {
-    SetMotorDirection(MOTOR_LEFT);
+    motor_direction = MOTOR_LEFT;
+    SetMotorDirection(motor_direction);
     SetMotorSpeed(abs(pwm_out));
   } else
   {
-    SetMotorDirection(MOTOR_RIGHT);
+    motor_direction = MOTOR_RIGHT;
+    SetMotorDirection(motor_direction);
     SetMotorSpeed(abs(pwm_out));  
   }
 }
