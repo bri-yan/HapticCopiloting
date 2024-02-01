@@ -69,13 +69,6 @@ void loop()
   SetPWMOut(PWMOut);
 }
 
-int ReadInt()
-{
-  char inData[SERIAL_WRITE_LENGTH];
-  Serial.readBytes(inData, SERIAL_WRITE_LENGTH);
-  return atoi(inData); //Inefficient, but it'll do for now.
-}
-
 float ReadFloat()
 {
     char inData[SERIAL_WRITE_LENGTH];
