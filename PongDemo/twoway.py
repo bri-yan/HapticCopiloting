@@ -36,7 +36,7 @@ def read_position():
         # high_byte = ord(serial_inst.read(1))
         ack_byte, sign_bit, low_byte, high_byte = data
 
-        if ack_byte != ord('a'):
+        if ack_byte != b'a':
             print("Error: Acknowledgement byte not received")
             return -1
 
@@ -59,7 +59,13 @@ def read_position():
 def write_target(target):
     command = f'w{target}'
     write_command(command)
-    time.sleep(0.025)
+    time.sleep(0.5)
+    ack_byte = serial_inst.read(1)
+    if ack_byte != b'a':
+        print("Error: Acknowledgement byte not received")
+        print(ack_byte)
+        return -1
+    return 0
 
 
 # Initialize Pygame
@@ -81,10 +87,10 @@ while True:
             sys.exit()
         elif (event.type == pygame.KEYDOWN and event.key == pygame.K_r):
             print(int(read_position()))
-            pass
         elif (event.type == pygame.KEYDOWN and event.key == pygame.K_w):
-            write_target(10)
-            pass
+            write_target(1000)
+        elif (event.type == pygame.KEYDOWN and event.key == pygame.K_e):
+            write_target(0)
 
     # Update the display
     pygame.display.flip()
