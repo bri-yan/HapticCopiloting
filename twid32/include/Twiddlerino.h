@@ -7,7 +7,7 @@
 void TwiddlerinoInit();
 
 //Reads the encoder returning a signed integer value
-uint16_t ReadEncoder();
+int16_t ReadEncoder();
 // Reads the encoder without using loops
 // uint16_t ReadEncoderFast();
 

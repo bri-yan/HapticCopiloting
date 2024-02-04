@@ -15,9 +15,9 @@ static const uint8_t ResetEncoderPin = 4;
 static const uint8_t EncoderDataPins[ENCODER_DATA_LENGTH] = {36,39,34,35,32,33,25,26};
 
 //Motor Control Pins
-static const uint8_t MotorPowerPin = 27;
-static const uint8_t MotorDir0Pin = 14;
-static const uint8_t MotorDir1Pin = 12;
+static const uint8_t MotorPowerPin = 13;
+static const uint8_t MotorDir0Pin = 12;
+static const uint8_t MotorDir1Pin = 14;
 
 //motor control variables
 static const uint32_t mPwmFreq = 32000; //pwm frequency
@@ -42,14 +42,20 @@ const float EPSILON = 1;
 
 void TwiddlerinoInit() {
   
-  // DATA BUS
-  //used to read in a byte from the encoder
-  for(int i =0; i < ENCODER_DATA_LENGTH; i++) {
-    pinMode(EncoderDataPins[i], INPUT);
-  }
+  // DATA BUS for encoder input
+  gpio_config_t io_conf;
+  io_conf.intr_type = GPIO_INTR_DISABLE;
+  io_conf.mode = GPIO_MODE_INPUT;
+  io_conf.pull_down_en = GPIO_PULLDOWN_DISABLE;
+  io_conf.pull_up_en = GPIO_PULLUP_DISABLE;
+  io_conf.pin_bit_mask =  ((1ULL<< EncoderDataPins[0]) | (1ULL<< EncoderDataPins[1]) | (1ULL<< EncoderDataPins[2]) | (1ULL<< EncoderDataPins[3]) 
+  | (1ULL<< EncoderDataPins[4]) | (1ULL<< EncoderDataPins[5] | (1ULL<< EncoderDataPins[6])) | (1ULL<< EncoderDataPins[7]));
+  gpio_config(&io_conf);
+  // for(int i = 0; i < ENCODER_DATA_LENGTH; i++){
+  //   pinMode(EncoderDataPins[i],INPUT);
+  // }
     
   // MOTOR
-  pinMode(MotorPowerPin, OUTPUT);
   pinMode(MotorDir0Pin, OUTPUT);
   pinMode(MotorDir1Pin, OUTPUT);
 
@@ -99,7 +105,7 @@ void TwiddlerinoInit() {
 //get each part of the 16-bit word, and then combine them.
 //
 //This function is written for readability, not efficiency
-uint16_t ReadEncoder()
+int16_t ReadEncoder()
 {
   //Enable data output
   //This prevents the encoder value from changing?
@@ -109,31 +115,36 @@ uint16_t ReadEncoder()
   digitalWrite(SelectPin, 0);
 
   //read the high byte value
-  uint8_t high_byte = 0;
-  for (int i = ENCODER_DATA_LENGTH - 1 ; i >= 1 ; i--) {
-      high_byte += digitalRead(EncoderDataPins[i]);
-      high_byte = high_byte << 1;
+  int8_t high_byte = 0;
+  for (int i = ENCODER_DATA_LENGTH - 1 ; i > 0 ; i--) {
+      high_byte |= gpio_get_level((gpio_num_t)EncoderDataPins[i]);
+      if(i==0){
+        high_byte |= gpio_get_level((gpio_num_t)EncoderDataPins[i]);
+      } else {
+        high_byte = high_byte << 1;
+      }
   }
-  high_byte += digitalRead(EncoderDataPins[0]); //Need to avoid shifting the last time
 
   
   //tell the encoder we want the low byte
   digitalWrite(SelectPin, 1);
 
   //read the high byte value
-  uint8_t low_byte = 0;
-  for (int i = ENCODER_DATA_LENGTH - 1 ; i >= 1 ; i--) {
-      low_byte += digitalRead(EncoderDataPins[i]);
-      low_byte = low_byte << 1;
-   }
-  low_byte += digitalRead(2);
-
+  int8_t low_byte = 0;
+  for (int i = ENCODER_DATA_LENGTH - 1 ; i > 0 ; i--) {
+      low_byte |= gpio_get_level((gpio_num_t)EncoderDataPins[i]);
+      if(i==0){
+        low_byte |= gpio_get_level((gpio_num_t)EncoderDataPins[i]);
+      } else {
+        low_byte = low_byte << 1;
+      }
+  }
   
   //disable data output, allowing encoder value to be updated
   digitalWrite(OutputEnablePin, 1);
   
   //compute the final value of the encoder
-  uint16_t encoder_value = (high_byte<<8) + low_byte;
+  int16_t encoder_value = (high_byte<<8) + low_byte;
   
   return encoder_value;
   
