@@ -59,9 +59,13 @@ const int numMeasurements = 2 * loopsPerMeasurement + 1;
 int positionVals[numMeasurements] = {};
 unsigned long timeVals[numMeasurements] = {};
 
+unsigned long currentIntervalMicros = 3000;
+unsigned long lastCurrentSampleMicros = 0;
+
 int currentItr = 0;
-const int numCurrentMeasurements = 3;
+const int numCurrentMeasurements = 40;
 int currentVals[numCurrentMeasurements] = {};
+long totalCurrent = 0;
 
 void loop()
 {
@@ -69,23 +73,27 @@ void loop()
 
   if (++itr == numMeasurements) {
     itr = 0;
-
-    double Ka = 5.0;
-    double Kv = 0.1;
-    //Serial.println("Expected: " + String((Ka * getAcceleration()) + (Kv * getVelocity())) + " Actual: " + String(getCurrent()));
   }
   pos = ReadEncoderFast();
   positionVals[itr] = pos;
   timeVals[itr] = micros();
 
-  if (++currentItr == numCurrentMeasurements) {
+  if (micros() - lastCurrentSampleMicros > currentIntervalMicros) {
+    lastCurrentSampleMicros = micros();
+
+    if (++currentItr == numCurrentMeasurements) {
     currentItr = 0;
-    //Serial.println("Expected: " + String(0) + " Actual: " + String(getCurrent()));
-    Serial.println(String(getCurrent()));
+    }
+    
+    int instantaneousCurrent = analogRead(A4);
+    if (motor_direction == 1) instantaneousCurrent *= -1; // 0 means CCW
+    totalCurrent -= currentVals[currentItr];
+    totalCurrent += instantaneousCurrent;
+    currentVals[currentItr] = instantaneousCurrent;
+
+    double Kv = 0.1;
+    if (currentItr % 10 == 0) Serial.println("Expected: " + String(Kv * getVelocity()) + " Actual: " + String(getCurrent()));
   }
-  int instantaneousCurrent = analogRead(A4);
-  if (motor_direction == 1) instantaneousCurrent *= -1; // 0 means CCW
-  currentVals[currentItr] = instantaneousCurrent;
 
   //Write position every updateInterval ms
   long t = millis();
@@ -169,55 +177,8 @@ double getVelocity() {
   return velocity / ((double) numRollingAvg);
 }
 
-double getAcceleration() {
-  int numRollingAvg = numMeasurements / 5;
-
-  // Get most recent average velocity
-  double velocity2 = 0.0;
-  for (int j = 0; j < numRollingAvg; ++j) {
-    int rollingAvgIdx2 = itr - j;
-    if (rollingAvgIdx2 < 0) {
-      rollingAvgIdx2 = numMeasurements + rollingAvgIdx2;
-    } 
-    int rollingAvgIdx1 = rollingAvgIdx2 - numRollingAvg;
-    if (rollingAvgIdx1 < 0) {
-      rollingAvgIdx1 = numMeasurements + rollingAvgIdx1;
-    }
-
-    double dx = positionVals[rollingAvgIdx2] - positionVals[rollingAvgIdx1];
-    double dt = ((double)(timeVals[rollingAvgIdx2] - timeVals[rollingAvgIdx1])) / 20000.0;
-    velocity2 += dx / dt;
-  }
-
-  // Get older average velocity
-  double velocity1 = 0.0;
-  for (int j = 0; j < numRollingAvg; ++j) {
-    int rollingAvgIdx2 = itr - (numMeasurements / 2) - j;
-    if (rollingAvgIdx2 < 0) {
-      rollingAvgIdx2 = numMeasurements + rollingAvgIdx2;
-    } 
-    int rollingAvgIdx1 = rollingAvgIdx2 - numRollingAvg;
-    if (rollingAvgIdx1 < 0) {
-      rollingAvgIdx1 = numMeasurements + rollingAvgIdx1;
-    }
-
-    double dx = positionVals[rollingAvgIdx2] - positionVals[rollingAvgIdx1];
-    double dt = ((double)(timeVals[rollingAvgIdx2] - timeVals[rollingAvgIdx1])) / 20000.0;
-    velocity1 += dx / dt;
-  }
-
-  int t2Idx = itr;
-  int t1Idx = (t2Idx == numMeasurements - 1) ? 0 : t2Idx + 1;
-  
-  return (velocity2 - velocity1) / (((double)(timeVals[t2Idx] - timeVals[t1Idx])) / 10000.0);
-}
-
 double getCurrent() {
-  double averagedCurrent;
-  for (int j = 0; j < numCurrentMeasurements; ++j) {
-    averagedCurrent += ((double) currentVals[j]) / ((double) numCurrentMeasurements);
-  }
-  return averagedCurrent;
+  return ((double) totalCurrent) / ((double) numCurrentMeasurements * 2.0);
 }
 
 double getUserTorque() {
