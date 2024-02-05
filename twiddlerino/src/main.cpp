@@ -5,7 +5,6 @@
 static float ReadFloat();
 static int ReadInt();
 double getVelocity();
-double getAcceleration();
 double getCurrent();
 double getUserTorque();
 
@@ -59,13 +58,15 @@ const int numMeasurements = 2 * loopsPerMeasurement + 1;
 int positionVals[numMeasurements] = {};
 unsigned long timeVals[numMeasurements] = {};
 
-unsigned long currentIntervalMicros = 3000;
+unsigned long currentIntervalMicros = 3500;
 unsigned long lastCurrentSampleMicros = 0;
 
 int currentItr = 0;
 const int numCurrentMeasurements = 40;
 int currentVals[numCurrentMeasurements] = {};
 long totalCurrent = 0;
+
+const double motorTorqueConstant = 1.54;
 
 void loop()
 {
@@ -91,8 +92,7 @@ void loop()
     totalCurrent += instantaneousCurrent;
     currentVals[currentItr] = instantaneousCurrent;
 
-    double Kv = 0.1;
-    if (currentItr % 10 == 0) Serial.println("Expected: " + String(Kv * getVelocity()) + " Actual: " + String(getCurrent()));
+    if (currentItr % 10 == 0) getUserTorque();
   }
 
   //Write position every updateInterval ms
@@ -171,18 +171,22 @@ double getVelocity() {
     }
 
     double dx = positionVals[rollingAvgIdx2] - positionVals[rollingAvgIdx1];
-    double dt = ((double)(timeVals[rollingAvgIdx2] - timeVals[rollingAvgIdx1])) / 20000.0;
+    double dt = ((double)(timeVals[rollingAvgIdx2] - timeVals[rollingAvgIdx1])) / 20000.0; // Scale as to not make velocity huge
     velocity += dx / dt;
   }
   return velocity / ((double) numRollingAvg);
 }
 
 double getCurrent() {
-  return ((double) totalCurrent) / ((double) numCurrentMeasurements * 2.0);
+  return ((double) totalCurrent) / ((double) numCurrentMeasurements * 20.0); // Scale to match actual current units (A)
 }
 
 double getUserTorque() {
-  return 0;
+  const double Kv = 0.025; // Empirically calculated
+  double totalTorque = motorTorqueConstant * getCurrent();
+  double expectedTorque = Kv * getVelocity();
+  Serial.println("Expected: " + String(expectedTorque) + " Actual: " + String(totalTorque));
+  return totalTorque - expectedTorque;
 }
 
 int ReadInt()
