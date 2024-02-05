@@ -1,11 +1,12 @@
 #include <Twiddlerino.h>
-#include "Arduino.h"
 #include <PID_v1.h>
+#include "Arduino.h"
 
 //freertos tasks
 void TaskUart0R(void *pvParameters);
 void TaskUart0W(void *pvParameters);
 void TaskTwiddlerinoControl(void *pvParameters);
+// Encoder enc(36,39, encoder_mode_t::SINGLE);
 
 //global variables
 static uint64_t last_time;
@@ -25,6 +26,7 @@ typedef struct {
   double duty_cycle;
   double set_point;
   bool pid_flag;
+  int64_t encoder_count;
 } telemetry_t;
 
 
@@ -34,7 +36,7 @@ void setup() {
   
   //mutex for position variable
   xSemaphore = xSemaphoreCreateMutex();
-  xQueueTelemetry = xQueueCreate(100, sizeof(telemetry_t));
+  xQueueTelemetry = xQueueCreate(3, sizeof(telemetry_t));
 
   //start these tasks on core 1
   xTaskCreatePinnedToCore(
@@ -47,15 +49,15 @@ void setup() {
     , 0
   );
 
-  xTaskCreatePinnedToCore(
-    TaskUart0R
-    ,  "Uart0 Read"
-    ,  8192
-    ,  NULL
-    , configMAX_PRIORITIES
-    , NULL
-    , 0
-  );
+  // xTaskCreatePinnedToCore(
+  //   TaskUart0R
+  //   ,  "Uart0 Read"
+  //   ,  8192
+  //   ,  NULL
+  //   , configMAX_PRIORITIES
+  //   , NULL
+  //   , 0
+  // );
 
   xTaskCreatePinnedToCore(
     TaskTwiddlerinoControl
@@ -132,69 +134,21 @@ void TaskUart0W(void *pvParameters) {
 
   for(;;) 
   {
-    if( Serial.availableForWrite() && xQueueReceive(xQueueTelemetry, &telem, 5) == pdTRUE ) {
-      Serial.printf("Time: %lu ms\t\tLoop dt: %lu us\t\tControl dt: %lu us\t\tRead dt: %lu us\t\tPos: %lf\t\tDutyCycle: %lf\t\tSetpoint: %lf\t\tpid flag: %i\n",
-      telem.timestamp_millis, telem.dt, telem.control_dt, telem.read_dt, telem.pos, telem.duty_cycle, telem.set_point, telem.pid_flag);
+    // if( Serial.available() ) {
+    //   byte b = Serial.read();
+    //   if(b == 'r' && Serial.availableForWrite() && xQueueReceive(xQueueTelemetry, &telem, 5) == pdTRUE){
+    //     Serial.printf("Time: %lu ms\t\tLoop dt: %lu us\t\tControl dt: %lu us\t\tRead dt: %lu us\t\tEncoder Cnt: %lli\t\tPos: %lf\t\tDutyCycle: %lf\t\tSetpoint: %lf\t\tpid flag: %i\n",
+    //     telem.timestamp_millis, telem.dt, telem.control_dt, telem.read_dt, telem.pos, telem.duty_cycle, telem.set_point, telem.pid_flag);
+    //   }
+    // }
+
+    if(Serial.availableForWrite() && xQueueReceive(xQueueTelemetry, &telem, 5) == pdTRUE){
+      Serial.printf("Time: %lu ms\t\tLoop dt: %lu us\t\tControl dt: %lu us\t\tRead dt: %lu us\t\tEncoder Cnt: %lli\t\tPos: %lf\t\tDutyCycle: %lf\t\tSetpoint: %lf\t\tpid flag: %i\n",
+      telem.timestamp_millis, telem.dt, telem.control_dt, telem.read_dt, telem.encoder_count, telem.pos, telem.duty_cycle, telem.set_point, telem.pid_flag);
     }
     vTaskDelay( 1 );
   }
 }
-
-// void TaskTwiddlerinoControl(void *pvParameters){
-
-//   TwiddlerinoInit();
-  
-//   //position is being read from other cores (maybe)
-//   xSemaphoreTake(xSemaphore, portMAX_DELAY);
-//   Position = 0;
-//   Setpoint = 0;
-//   DutyCycle = 0;
-
-//   myPID.SetMode(AUTOMATIC);
-//   myPID.SetSampleTime(1);
-//   myPID.SetOutputLimits(-255, 255);
-//   myPID.SetTunings(Kp,Ki,Kd);
-//   myPID.SetControllerDirection(REVERSE);
-
-//   xSemaphoreGive(xSemaphore);
-
-//   last_time = micros();
-//   uint32_t dt = 0;
-//   uint32_t read_dt = 0;
-//   uint32_t control_dt = 0;
-//   telemetry_t telem;
-
-//   for(;;) 
-//   {
-//     xSemaphoreTake(xSemaphore, portMAX_DELAY);
-
-//     read_dt = micros();
-//     Position = ReadEncoder();
-//     read_dt = micros() - read_dt;
-
-//     control_dt = micros();
-//     telem.pid_flag = myPID.Compute();
-//     SetPWMOut(DutyCycle);
-//     control_dt = micros() - control_dt;
-
-
-//     telem.duty_cycle = DutyCycle;
-//     telem.pos = Position;
-//     telem.set_point = Setpoint;
-
-//     xSemaphoreGive(xSemaphore);
-
-//     telem.timestamp_millis = millis();
-//     dt = micros() - last_time;
-//     last_time+=dt;
-//     telem.dt = dt;
-//     telem.control_dt = control_dt;
-//     telem.read_dt = read_dt;
-//     xQueueSend(xQueueTelemetry, &telem, 0);
-
-//     vTaskDelay(1);
-//   }
-// }
 
 void TaskTwiddlerinoControl(void *pvParameters){
 
@@ -203,7 +157,7 @@ void TaskTwiddlerinoControl(void *pvParameters){
   //position is being read from other cores (maybe)
   xSemaphoreTake(xSemaphore, portMAX_DELAY);
   Position = 0;
-  Setpoint = 0;
+  Setpoint = 10;
   DutyCycle = 0;
 
   myPID.SetMode(AUTOMATIC);
@@ -220,18 +174,25 @@ void TaskTwiddlerinoControl(void *pvParameters){
   uint32_t control_dt = 0;
   telemetry_t telem;
 
+  //encoder quaderature signal counter
+  //the encoder library uses cpu interrupt count peripheral to count the signal steps
+  encoder_init(PCNT_UNIT_0,(gpio_num_t) 36,(gpio_num_t) 39, 250);
+
+  encoder_clear_count();
+  telem.encoder_count = encoder_get_count();
+
   for(;;) 
   {
     xSemaphoreTake(xSemaphore, portMAX_DELAY);
 
     read_dt = micros();
-    Position = ReadEncoder();
+    telem.encoder_count = encoder_get_count();
+    Position = encoder_get_angle();
     read_dt = micros() - read_dt;
 
     control_dt = micros();
-    // telem.pid_flag = myPID.Compute();
+    telem.pid_flag = myPID.Compute();
     telem.pid_flag = 0;
-    DutyCycle = 100;
     SetPWMOut(DutyCycle);
     control_dt = micros() - control_dt;
 
@@ -240,7 +201,6 @@ void TaskTwiddlerinoControl(void *pvParameters){
     telem.set_point = Setpoint;
 
     xSemaphoreGive(xSemaphore);
-
     telem.timestamp_millis = millis();
     dt = micros() - last_time;
     last_time+=dt;
