@@ -9,7 +9,7 @@
 /******************************************************************************/
 
 //encoder lib header
-#include "Encoder.h"
+#include "drivers/encoder.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -46,6 +46,9 @@
 /*            P R I V A T E  F U N C T I O N  P R O T O T Y P E S             */
 /******************************************************************************/
 
+static void set_motor_direction(uint8_t md);
+static void set_motor_speed(uint8_t spd);
+
 static void encoder_pcnt_overflow_interrupt_handler(void *arg);
 
 /******************************************************************************/
@@ -58,9 +61,12 @@ static bool is_pcnt_isr_service_installed = false;
 static portMUX_TYPE spinlock = portMUX_INITIALIZER_UNLOCKED;
 static _lock_t isr_service_install_lock;
 
-//encoder count
-static volatile int64_t encoder_accu_cnt = 0;
 static pcnt_unit_t encoder_pcnt_unit = PCNT_UNIT_0;
+
+//encoder count
+//This is updated by an interrupt and likely not atomic!
+//use lock/mutex when reading/writing to this variable
+static volatile int64_t encoder_accu_cnt = 0;
 
 /******************************************************************************/
 /*                P U B L I C  G L O B A L  V A R I A B L E S                 */
@@ -72,20 +78,20 @@ static pcnt_unit_t encoder_pcnt_unit = PCNT_UNIT_0;
 /*                       P U B L I C  F U N C T I O N S                       */
 /******************************************************************************/
 
-void encoder_init(pcnt_unit_t unit, gpio_num_t quadPinA, gpio_num_t quadPinB, uint16_t filter) {
+void encoder_init(pcnt_unit_t unit, gpio_num_t quad_pin_a, gpio_num_t quad_pin_b, uint16_t filter) {
 
     //init value
     encoder_accu_cnt = 0;
     encoder_pcnt_unit = unit;
 
     //pins
-    pinMode(quadPinA, INPUT_PULLUP);
-    pinMode(quadPinB, INPUT_PULLUP);
+    pinMode(quad_pin_a, INPUT_PULLUP);
+    pinMode(quad_pin_b, INPUT_PULLUP);
 
     //config channel 0 counter
     pcnt_config_t dev_config = {
-        .pulse_gpio_num = quadPinA,
-        .ctrl_gpio_num = quadPinB,
+        .pulse_gpio_num = quad_pin_a,
+        .ctrl_gpio_num = quad_pin_b,
         .lctrl_mode = PCNT_MODE_KEEP,
         .hctrl_mode = PCNT_MODE_REVERSE,
         .pos_mode = PCNT_COUNT_DEC,
@@ -99,8 +105,8 @@ void encoder_init(pcnt_unit_t unit, gpio_num_t quadPinA, gpio_num_t quadPinB, ui
     pcnt_unit_config(&dev_config);
 
     //config channel 1 counter
-    dev_config.pulse_gpio_num = quadPinB;
-    dev_config.ctrl_gpio_num = quadPinA;
+    dev_config.pulse_gpio_num = quad_pin_b;
+    dev_config.ctrl_gpio_num = quad_pin_a;
     dev_config.channel = PCNT_CHANNEL_1;
 
     //disable because we are counting 2 (half) quaderature
