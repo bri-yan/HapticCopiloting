@@ -32,7 +32,7 @@ PID myPID(&pos, &PWMOut, &target, p, i, d, REVERSE);
 
 //how many bytes Processing will write to the serial
 //when passing p, i, d, and target updates
-int SERIAL_WRITE_LENGTH = 32;
+int SERIAL_WRITE_LENGTH = 4;
 
 void setup()
 {
@@ -52,14 +52,18 @@ void loop()
     byte command = Serial.read();
     if (command == 'r') {
       Serial.write('a');
+      pos = ReadEncoderFast();
       int position = (int)pos;
       bool isNegative = position < 0;
+      if (isNegative) {
+        position = abs(position); // If negative, make it positive for transmission
+      }
       byte signBit = isNegative ? 1 : 0;
       Serial.write(signBit);
       Serial.write(position & 0xFF);    // Low byte
       Serial.write((position >> 8) & 0xFF); // High byte
     } else if (command == 'w') {
-      pos = ReadFloat();
+      target = ReadFloat();
       Serial.write('a');  
     }
   }
