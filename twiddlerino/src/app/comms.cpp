@@ -46,11 +46,11 @@ cmd_type_t decode_cmd(String * string, test_config_t *test_config) {
     uint16_t i0 = 0;
     String read_string = *string;
     test_config_t t = *test_config;
-    cmd_type_t cmd_type = cmd_type_t::NA_CMD;
+    t.cmd_type = cmd_type_t::NA_CMD;
 
     //'config_test,P:{params.P},I:{params.I},D:{params.D},set_point:{params.SetPoint}'
     if(read_string.substring(0,10).compareTo("config_test") == 0){
-        cmd_type = cmd_type_t::CONFIG_TEST;
+        t.cmd_type = cmd_type_t::CONFIG_TEST;
         i0 = read_string.indexOf(',',15);
         t.Kp = read_string.substring(15,i0-1).toDouble();
         i = read_string.indexOf(',', i0+3);
@@ -62,12 +62,12 @@ cmd_type_t decode_cmd(String * string, test_config_t *test_config) {
         i = read_string.indexOf(',', i0);
         t.set_point = read_string.substring(i0,i-1).toDouble();
     } else if (read_string.substring(0,9).compareTo("start_test") == 0) {
-        cmd_type = cmd_type_t::START_TEST;
+        t.cmd_type = cmd_type_t::START_TEST;
     } else if (read_string.substring(0,9).compareTo("abort_test") == 0) {
-        cmd_type = cmd_type_t::ABORT_TEST;
+        t.cmd_type = cmd_type_t::ABORT_TEST;
     }
 
-    return cmd_type;
+    return t.cmd_type;
 
 }
 

@@ -50,6 +50,17 @@ typedef struct {
 } control_telemetry_t;
 
 /**
+ * @brief Command Types
+ * 
+ */
+typedef enum {
+    CONFIG_TEST,
+    START_TEST,
+    ABORT_TEST,
+    NA_CMD = -1
+} cmd_type_t;
+
+/**
  * @brief Test Config
  * 
  */
@@ -66,17 +77,6 @@ typedef struct {
     double set_point;
 } test_config_t;
 
-
-/**
- * @brief Command Types
- * 
- */
-typedef enum {
-    CONFIG_TEST,
-    START_TEST,
-    ABORT_TEST,
-    NA_CMD = -1
-} cmd_type_t;
 
 /******************************************************************************/
 /*                             F U N C T I O N S                              */

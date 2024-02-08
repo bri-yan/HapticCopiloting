@@ -65,7 +65,7 @@ static QueueHandle_t xQueueCommand;
 /*                       P U B L I C  F U N C T I O N S                       */
 /******************************************************************************/
 
-void twiddlerino_setup(startup_type_t startup_type = startup_type_t::IDLE) {
+void twiddlerino_setup(startup_type_t startup_type) {
   if(!Serial) {
     Serial.begin( 115200 );//this is on rx0 tx0
     Serial.println( "Serial connected on uart0!" );
@@ -170,7 +170,7 @@ void TaskReadCommands(void *pvParameters) {
       }
 
       if(cmd_type==cmd_type_t::START_TEST) {
-        vTaskGetInfo(task_handle, &task_status, task_freespace, task_state);
+        task_state = eTaskGetState(task_handle);
 
         if((task_state == eTaskState::eDeleted || task_state == eTaskState::eSuspended || task_state == eTaskState::eInvalid) 
          && xQueueReceive(xQueueCommand, &test_config, portMAX_DELAY)) {

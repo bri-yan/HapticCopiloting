@@ -27,8 +27,6 @@
 /*            P R I V A T E  F U N C T I O N  P R O T O T Y P E S             */
 /******************************************************************************/
 
-static void set_motor_state(motor_state_t state);
-
 /******************************************************************************/
 /*               P R I V A T E  G L O B A L  V A R I A B L E S                */
 /******************************************************************************/
@@ -65,7 +63,7 @@ void motor_init(const gpio_num_t motor_power_pin, const gpio_num_t motor_dir0_pi
     ledcAttachPin(power_pin, motor_pwm_channel);//attack motor power pin to channel 0 timer
     ledcWrite(motor_pwm_channel, 0);//start at duty cycle of 0 (analog voltage ~ 0)
 
-    set_motor_state(motor_state_t::MOTOR_LOW);
+    motor_set_state(motor_state_t::MOTOR_LOW);
 }
 
 //stop power to motor
@@ -95,15 +93,15 @@ void motor_set_pwm(int32_t dc)
   uint8_t pwm_duty_cycle = min(MOTOR_DUTY_CYCLE_RES, max(MOTOR_DUTY_CYCLE_RES, dc));
   if (pwm_duty_cycle == 0)
   {
-    set_motor_state(MOTOR_LOW);
+    motor_set_state(MOTOR_LOW);
   }
   else if (pwm_duty_cycle < 0)
   {
-    set_motor_state(MOTOR_LEFT);
+    motor_set_state(MOTOR_LEFT);
     ledcWrite(motor_pwm_channel, abs(pwm_duty_cycle));
   } else
   {
-    set_motor_state(MOTOR_RIGHT);
+    motor_set_state(MOTOR_RIGHT);
     ledcWrite(motor_pwm_channel, abs(pwm_duty_cycle));
   }
 }
