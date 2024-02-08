@@ -13,11 +13,13 @@ port = "COM3"
 serial_inst.baudrate = 115200
 serial_inst.port = port 
 serial_inst.open()
+time.sleep(3)
 
 def write_command(command):
     try:
         serial_inst.write(command.encode())
-        print(f'Sent command: {command}')
+        if command[0] == 'w':
+            print(f'Sent command: {command}')
     except Exception as e:
         print(f"Error sending command: {e}")
 
@@ -34,7 +36,7 @@ def read_position():
         # high_byte = ord(serial_inst.read(1))
         ack_byte, sign_bit, low_byte, high_byte = data
 
-        if ack_byte != b'a':
+        if ack_byte != ord('a'):
             print("Error: Acknowledgement byte not received")
             return -1
 
@@ -47,8 +49,8 @@ def read_position():
         smoothed_position = np.median(buffer)
 
         # Optionally, skip previous position values
-        serial_inst.flushInput()
-
+        # serial_inst.flushInput()
+        # print(-int(smoothed_position))
         return -int(smoothed_position)
     except Exception as e:
         print("Error:", e)
@@ -57,7 +59,6 @@ def read_position():
 def write_target(target):
     command = f'w{target}'
     write_command(command)
-    time.sleep(0.5)
     ack_byte = serial_inst.read(1)
     if ack_byte != b'a':
         print("Error: Acknowledgement byte not received")
@@ -124,7 +125,7 @@ buffer = deque(maxlen=10)
 computer_control = PID(kp=1.8, ki=0, kd=0.1)
 player_control = PID(kp=1.5, ki=0, kd=0.1)
 player_score, computer_score = 0, 0
-target = 100
+pid_target = 200
 
 # Main game loop
 while True:
@@ -146,7 +147,7 @@ while True:
         continue
 
     # Player controls with arduino
-    target = read_position(buffer)*POSITION_SCALING_FACTOR + MIDDLE
+    target = read_position()*POSITION_SCALING_FACTOR + MIDDLE
     player_paddle.move(target - prev_position)
     prev_position = target
 
@@ -156,13 +157,13 @@ while True:
 
     # Move the ball
     ball.move()
-    if ball.check_collision(player_paddle) or ball.check_collision(computer_paddle):
-        ball.vx *= 1.1
-        ball.vy *= 1.1
-
-        if ball.check_collision(player_paddle):
-            write_target(-target)
-            target = -target
+    player_collision, computer_collision = ball.check_collision(player_paddle), ball.check_collision(computer_paddle)
+    if player_collision or computer_collision:
+        ball.vx *= 1.05
+        ball.vy *= 1.05
+        if computer_collision:
+            write_target(-pid_target)
+            pid_target = -pid_target
 
 
     # Clear the screen
