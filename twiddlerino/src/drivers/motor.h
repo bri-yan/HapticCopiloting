@@ -1,20 +1,13 @@
 /**
- * @file twiddlerino.h
- * @brief Twiddlerino main file
+ * @file motor.h
+ * @brief Motor driver
  * @author Yousif El-Wishahy (ywishahy@student.ubc.ca)
+ * Based on code from Oliver Schneider (oschneid@cs.ubc.ca) and Bereket Guta (bguta@cs.ubc.ca)
+ * 
  */
 
-#ifndef TWIDDLERINO_H_
-#define TWIDDLERINO_H_
-
-/******************************************************************************/
-/*                              I N C L U D E S                               */
-/******************************************************************************/
-
-#include <stdint.h>
-
-//initializes Twiddlerino
-void twiddlerino_setup();
+#ifndef MOTOR_H_
+#define MOTOR_H_
 
 /******************************************************************************/
 /*                              I N C L U D E S                               */
@@ -30,43 +23,44 @@ void twiddlerino_setup();
 /******************************************************************************/
 
 #define MOTOR_PWM_FREQ 32000U
-#define MOTOR_DUTY_CYCLE_RES 8
+#define MOTOR_DUTY_CYCLE_RES_BITS 8U
+#define MOTOR_DUTY_CYCLE_RES 255
 
 /******************************************************************************/
 /*                              T Y P E D E F S                               */
 /******************************************************************************/
 
 /**
- * @brief Control Loop telemetry
+ * @brief Motor States
  * 
  */
-typedef struct {
-    //timing
-    uint32_t timestamp_ms;
-    uint32_t loop_dt;
-    uint32_t read_dt;
-    uint32_t control_dt;
-
-    //state variables
-    double set_point;
-    double position;
-    double velocity;
-    double current;
-    double torque_external;
-    double pwm_duty_cycle;
-
-    //other
-    bool pid_success_flag;
-} control_telemetry_t;
+typedef enum {
+    MOTOR_LEFT, 
+    MOTOR_RIGHT,
+    MOTOR_LOW,
+    MOTOR_NOT_INITIALIZED = -1,
+} motor_state_t;
 
 /******************************************************************************/
 /*                             F U N C T I O N S                              */
 /******************************************************************************/
 
-//initializes Twiddlerino
-void twiddlerino_setup();
+//initializes motor
+void motor_init(const gpio_num_t motor_power_pin, const gpio_num_t motor_dir0_pin, const gpio_num_t motor_dir1_pin);
 
-char* encode_telemetry(control_telemetry_t *telemtry);
+//stop power to motor
+void motor_stop();
 
-#endif //TWIDDLERINO_H_
+motor_state_t motor_set_state(motor_state_t);
 
+motor_state_t motor_get_state();
+
+uint32_t motor_get_frequency();
+
+uint32_t motor_get_duty_cycle();
+
+//sets the duty cycle to the motor
+void motor_set_pwm(int32_t dc);
+
+
+#endif // MOTOR_H_

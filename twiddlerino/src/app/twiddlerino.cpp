@@ -21,12 +21,17 @@
 //arduino
 #include "Arduino.h"
 
+//control
 #include "PID_v1.h"
+//telemetry
+#include "comms.h"
 
 /******************************************************************************/
 /*                               D E F I N E S                                */
 /******************************************************************************/
 
+#define TELEMETRY_QUEUE_SIZE 100U
+#define COMMAND_QUEUE_SIZE 10U
 
 /******************************************************************************/
 /*                              T Y P E D E F S                               */
@@ -39,7 +44,7 @@
 /******************************************************************************/
 
 //freertos tasks
-void TaskReadSerial(void *pvParameters);
+void TaskReadCommands(void *pvParameters);
 void TaskPublishTelemetry(void *pvParameters);
 void TaskTwiddlerinoControl(void *pvParameters);
 
@@ -47,14 +52,8 @@ void TaskTwiddlerinoControl(void *pvParameters);
 /*               P R I V A T E  G L O B A L  V A R I A B L E S                */
 /******************************************************************************/
 
-//global variables
-static uint64_t last_time;
-static double Kp=0.4, Ki=0, Kd=0;
-static double Setpoint, Position, DutyCycle;
-PID myPID(&Position, &DutyCycle, &Setpoint, Kp, Ki, Kd, REVERSE);
-
-static SemaphoreHandle_t xControlVariableSemaphore;
 static QueueHandle_t xQueueTelemetry;
+static QueueHandle_t xQueueCommand;
 
 /******************************************************************************/
 /*                P U B L I C  G L O B A L  V A R I A B L E S                 */
@@ -72,19 +71,20 @@ void twiddlerino_setup() {
     Serial.println( "Serial connected on uart0!" );
   }
 
+  //setup hardware
   encoder_init(pcnt_unit_t::PCNT_UNIT_0, PIN_ENCODER_QUAD_A, PIN_ENCODER_QUAD_B, ENCODER_DEFAULT_FILTER);
   motor_init(PIN_MOTOR_POWER, PIN_MOTOR_DIR_0, PIN_MOTOR_DIR_1);
-
-  last_time = micros();
+  encoder_clear_count();
+  motor_set_state(motor_state_t::MOTOR_LOW);
   
-  //mutex for position variable
-  xControlVariableSemaphore = xSemaphoreCreateMutex();
-  xQueueTelemetry = xQueueCreate(3, sizeof(control_telemetry_t));
+  //queues for communicating with the control core
+  xQueueTelemetry = xQueueCreate(TELEMETRY_QUEUE_SIZE, sizeof(control_telemetry_t));
+  xQueueCommand = xQueueCreate(COMMAND_QUEUE_SIZE, sizeof(test_config_t));
 
-  //start these tasks on core 1
+  //start these tasks on core 0
   xTaskCreatePinnedToCore(
     TaskPublishTelemetry
-    ,  "Controller Telemetry"
+    ,  "Controller Publish Telemetry"
     ,  8192
     ,  NULL
     , configMAX_PRIORITIES - 1
@@ -92,24 +92,14 @@ void twiddlerino_setup() {
     , 0
   );
 
-  // xTaskCreatePinnedToCore(
-  //   TaskReadSerial
-  //   ,  "Read Serial"
-  //   ,  8192
-  //   ,  NULL
-  //   , configMAX_PRIORITIES
-  //   , NULL
-  //   , 0
-  // );
-
   xTaskCreatePinnedToCore(
-    TaskTwiddlerinoControl
-    ,  "Twiddlerino Control"
+    TaskReadCommands
+    ,  "Read Commands"
     ,  8192
     ,  NULL
-    ,  configMAX_PRIORITIES
-    ,  NULL
-    ,  1
+    , configMAX_PRIORITIES
+    , NULL
+    , 0
   );
 }
 
@@ -117,61 +107,57 @@ void twiddlerino_setup() {
 /*                      P R I V A T E  F U N C T I O N S                      */
 /******************************************************************************/
 
-char* encode_telemetry(control_telemetry_t *t){
-  static char buffer[200];
-  snprintf(buffer, sizeof(buffer), "time_ms:%lu,loop_dt:%lu,control_dt:%lu,read_dt:%lu,pid_success_flag:
-    %i,position:%lf,pwm_duty_cycle:%lf,set_point:%f,velocity:%lf,current:%lf,torque_external:%lf\n", 
-    t->timestamp_ms, t->loop_dt, t->control_dt, t->read_dt, t->pid_success_flag, t->position, 
-    t->pwm_duty_cycle, t->set_point, t->velocity, t->current, t->torque_external);
-}
-
-void TaskUart0R(void *pvParameters) {
+void TaskReadCommands(void *pvParameters) {
   if(!Serial) {
     Serial.begin( 115200 );//this is on rx0 tx0
     Serial.println( "Serial connected on uart0!" );
   }
 
+  String read_string;
+  test_config_t test_config;
+  cmd_type_t cmd_type;
+  TaskHandle_t task_handle;
+  TaskStatus_t task_status;
+  BaseType_t task_freespace;
+  eTaskState task_state;
+
   for(;;) 
   {
     if( Serial.available() ) {
-      byte b = Serial.read();
-      if(b == 'w'){
-        Serial.print('a');
-        char bytes[4];
+      read_string = read_string_until('\n');
+      cmd_type = decode_cmd(&read_string, &test_config);
 
-        while(!Serial.available()){
+      if(cmd_type==cmd_type_t::CONFIG_TEST) {
+        xQueueSend(xQueueCommand, &test_config, portMAX_DELAY);
+        while(!Serial.availableForWrite()) {
           vTaskDelay(1);
         }
+        Serial.print('ack\n');
+      }
 
-        b = Serial.read();
-        Serial.readBytes(bytes,4);
+      if(cmd_type==cmd_type_t::START_TEST) {
+        vTaskGetInfo(task_handle, &task_status, task_freespace, task_state);
 
-        if (b=='S'){
-          double val = atof(bytes);
-          if(xSemaphoreTake(xControlVariableSemaphore, portMAX_DELAY) == pdTRUE){
-            Setpoint = val;
-            xSemaphoreGive(xControlVariableSemaphore);
-          }
-        } else {
-          if(b=='P'){
-            Kp = atof(bytes);
-          } else if (b=='I'){
-            Ki = atof(bytes);
-          } else if (b=='D'){
-            Kd = atof(bytes);
-          }
-
-          if(xSemaphoreTake(xControlVariableSemaphore, portMAX_DELAY) == pdTRUE){
-            myPID.SetTunings(Kp,Ki,Kd);
-            xSemaphoreGive(xControlVariableSemaphore);
-          }
+        if((task_state == eTaskState::eDeleted || task_state == eTaskState::eSuspended || task_state == eTaskState::eInvalid) 
+         && xQueueReceive(xQueueCommand, &test_config, portMAX_DELAY)) {
+          //start control test task on core 1
+          xTaskCreatePinnedToCore(
+            TaskTwiddlerinoControl
+            ,  "Twiddlerino Control"
+            ,  8192
+            ,  &test_config
+            ,  configMAX_PRIORITIES
+            ,  &task_handle
+            ,  1
+          );
         }
+      }
 
-        Serial.printf("***********************\nUpdate for %c with int value: %d\n**************************\n",b,atoi(bytes));
+      if(cmd_type==cmd_type_t::ABORT_TEST) {
+        vTaskDelete(task_handle);
       }
     }
-    
-    vTaskDelay( 1 );
+    vTaskDelay( 5 );
   }
 }
 
@@ -181,24 +167,24 @@ void TaskPublishTelemetry(void *pvParameters) {
     Serial.println( "Serial connected on uart0!" );
   }
 
-  control_telemetry_t telem;
+  control_telemetry_t t;
 
   for(;;) 
   {
-    if(Serial.availableForWrite() && xQueueReceive(xQueueTelemetry, &telem, 5) == pdTRUE){
-      Serial.printf("Time: %lu ms\t\tLoop dt: %lu us\t\tControl dt: %lu us\t\tRead dt: %lu us\t\tEncoder Cnt: %lli\t\tPos: %lf\t\tDutyCycle: %lf\t\tSetpoint: %lf\t\tpid flag: %i\n",
-      telem.timestamp_ms,telem.control_dt,telem.);
+    if(xQueueReceive(xQueueTelemetry, &t, 5) == pdTRUE){
+      publish_telemetry(&t);
     }
     vTaskDelay( 1 );
   }
 }
 
+//this task is triggered whenever a new command is released
 void TaskTwiddlerinoControl(void *pvParameters){
-  //position is being read from other cores (maybe)
-  xSemaphoreTake(xControlVariableSemaphore, portMAX_DELAY);
-  Position = 0;
-  Setpoint = 10;
-  DutyCycle = 0;
+
+  uint64_t last_time = micros();
+  double Kp=0.4, Ki=0, Kd=0;
+  double Setpoint=0, Position=0, DutyCycle=0;
+  PID myPID(&Position, &DutyCycle, &Setpoint, Kp, Ki, Kd, REVERSE);
 
   myPID.SetMode(AUTOMATIC);
   myPID.SetSampleTime(1);
@@ -206,47 +192,38 @@ void TaskTwiddlerinoControl(void *pvParameters){
   myPID.SetTunings(Kp,Ki,Kd);
   myPID.SetControllerDirection(REVERSE);
 
-  xSemaphoreGive(xControlVariableSemaphore);
-
-  last_time = micros();
   uint32_t dt = 0;
   uint32_t read_dt = 0;
   uint32_t control_dt = 0;
   control_telemetry_t telem;
-
-  //encoder quaderature signal counter
-  //the encoder library uses cpu interrupt count peripheral to count the signal steps
-  encoder_init(PCNT_UNIT_0,(gpio_num_t) 36,(gpio_num_t) 39, 250);
-
-  encoder_clear_count();
-  telem.encoder_count = encoder_get_count();
+  test_config_t test_config;
 
   for(;;) 
   {
-    xSemaphoreTake(xControlVariableSemaphore, portMAX_DELAY);
+    if(xQueueReceive(xQueueTelemetry, &test_config, 5) == pdTRUE){
+    }
 
     read_dt = micros();
-    telem.encoder_count = encoder_get_count();
-    Position = encoder_get_angle();
+    telem.position = encoder_get_angle();
+    Position = telem.position;
     read_dt = micros() - read_dt;
 
     control_dt = micros();
-    telem.pid_flag = myPID.Compute();
-    telem.pid_flag = 0;
-    SetPWMOut(DutyCycle);
+    telem.pid_success_flag = myPID.Compute();
+    telem.pid_success_flag = 0;
+    motor_set_pwm(DutyCycle);
     control_dt = micros() - control_dt;
 
-    telem.duty_cycle = DutyCycle;
-    telem.pos = Position;
+    telem.pwm_duty_cycle = DutyCycle;
     telem.set_point = Setpoint;
 
-    xSemaphoreGive(xControlVariableSemaphore);
     telem.timestamp_ms = millis();
     dt = micros() - last_time;
     last_time+=dt;
-    telem.dt = dt;
+    telem.loop_dt = dt;
     telem.control_dt = control_dt;
     telem.read_dt = read_dt;
+
     xQueueSend(xQueueTelemetry, &telem, 0);
 
     vTaskDelay(1);

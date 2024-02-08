@@ -61,7 +61,7 @@ void motor_init(const gpio_num_t motor_power_pin, const gpio_num_t motor_dir0_pi
     //this uses the esp32 idf ledc driver
     //the ledc driver is writting to power leds 
     // but can also gen pwm signals for other purposes
-    ledcSetup(motor_pwm_channel, MOTOR_PWM_FREQ, MOTOR_DUTY_CYCLE_RES); //channel 0, 32khz, 8 bit (0-255) duty cycle resolution
+    ledcSetup(motor_pwm_channel, MOTOR_PWM_FREQ, MOTOR_DUTY_CYCLE_RES_BITS); //channel 0, 32khz, 8 bit (0-255) duty cycle resolution
     ledcAttachPin(power_pin, motor_pwm_channel);//attack motor power pin to channel 0 timer
     ledcWrite(motor_pwm_channel, 0);//start at duty cycle of 0 (analog voltage ~ 0)
 
@@ -92,7 +92,7 @@ uint32_t motor_get_duty_cycle() {
 
 void motor_set_pwm(int32_t dc)
 {
-  uint8_t pwm_duty_cycle = min(255, max(-255, dc));
+  uint8_t pwm_duty_cycle = min(MOTOR_DUTY_CYCLE_RES, max(MOTOR_DUTY_CYCLE_RES, dc));
   if (pwm_duty_cycle == 0)
   {
     set_motor_state(MOTOR_LOW);
@@ -108,11 +108,7 @@ void motor_set_pwm(int32_t dc)
   }
 }
 
-/******************************************************************************/
-/*                      P R I V A T E  F U N C T I O N S                      */
-/******************************************************************************/
-
-static void set_motor_state(motor_state_t state)
+motor_state_t motor_set_state(motor_state_t state)
 {
    switch(state)
    {
@@ -133,4 +129,10 @@ static void set_motor_state(motor_state_t state)
             Serial.println("ERROR, incorrect motor direction!");
         }
    }
+
+   return motor_state;
 }
+
+/******************************************************************************/
+/*                      P R I V A T E  F U N C T I O N S                      */
+/******************************************************************************/
