@@ -55,10 +55,10 @@ typedef struct {
  */
 typedef struct {
     cmd_type_t cmd_type;
-    
+
     //timing
     uint32_t sample_rate_us;
-    uint32_t test_duration_ms;
+    int32_t test_duration_ms;
 
     double Kp;
     double Ki;

@@ -65,23 +65,28 @@ static QueueHandle_t xQueueCommand;
 /*                       P U B L I C  F U N C T I O N S                       */
 /******************************************************************************/
 
-void twiddlerino_setup() {
+void twiddlerino_setup(startup_type_t startup_type = startup_type_t::IDLE) {
   if(!Serial) {
     Serial.begin( 115200 );//this is on rx0 tx0
     Serial.println( "Serial connected on uart0!" );
   }
 
-  //setup hardware
-  encoder_init(pcnt_unit_t::PCNT_UNIT_0, PIN_ENCODER_QUAD_A, PIN_ENCODER_QUAD_B, ENCODER_DEFAULT_FILTER);
-  motor_init(PIN_MOTOR_POWER, PIN_MOTOR_DIR_0, PIN_MOTOR_DIR_1);
-  encoder_clear_count();
-  motor_set_state(motor_state_t::MOTOR_LOW);
-  
   //queues for communicating with the control core
   xQueueTelemetry = xQueueCreate(TELEMETRY_QUEUE_SIZE, sizeof(control_telemetry_t));
   xQueueCommand = xQueueCreate(COMMAND_QUEUE_SIZE, sizeof(test_config_t));
 
-  //start these tasks on core 0
+  //hardwaire setup
+  encoder_init(pcnt_unit_t::PCNT_UNIT_0, PIN_ENCODER_QUAD_A, PIN_ENCODER_QUAD_B, ENCODER_DEFAULT_FILTER);
+  motor_init(PIN_MOTOR_POWER, PIN_MOTOR_DIR_0, PIN_MOTOR_DIR_1);
+  encoder_clear_count();
+  motor_set_state(motor_state_t::MOTOR_LOW);
+
+  //after this , if we want to idle dont run any tasks
+  if (startup_type == startup_type_t::IDLE) {
+    return;
+  }
+
+  //start telemetry on core 0
   xTaskCreatePinnedToCore(
     TaskPublishTelemetry
     ,  "Controller Publish Telemetry"
@@ -92,15 +97,44 @@ void twiddlerino_setup() {
     , 0
   );
 
-  xTaskCreatePinnedToCore(
-    TaskReadCommands
-    ,  "Read Commands"
-    ,  8192
-    ,  NULL
-    , configMAX_PRIORITIES
-    , NULL
-    , 0
-  );
+  //start the command reader task if that is our perferred startup mode
+  //this task awaits commands to trigger test/controller
+  //this task can trigger other tasks to run the controller
+  if (startup_type == startup_type_t::RUN_AWAIT_COMMANDS) {
+    xTaskCreatePinnedToCore(
+      TaskReadCommands
+      ,  "Read Commands"
+      ,  8192
+      ,  NULL
+      , configMAX_PRIORITIES
+      , NULL
+      , 0
+    );
+  }
+
+  //run default controller
+  if (startup_type == startup_type_t::RUN_CONTROLLER_DEFAULT) {
+
+    //default config
+    test_config_t test_config;
+    test_config.Kd = 0;
+    test_config.Kp = 1;
+    test_config.Ki = 0;
+    test_config.sample_rate_us = 1000;
+    test_config.set_point = 0;
+    test_config.test_duration_ms = -1;
+
+    //start task
+    xTaskCreatePinnedToCore(
+      TaskTwiddlerinoControl
+      ,  "Twiddlerino Control"
+      ,  8192
+      ,  &test_config
+      ,  configMAX_PRIORITIES
+      ,  NULL
+      ,  1
+    );
+  }
 }
 
 /******************************************************************************/
@@ -178,31 +212,50 @@ void TaskPublishTelemetry(void *pvParameters) {
   }
 }
 
-//this task is triggered whenever a new command is released
+//this task is triggered whenever we want to run the basic controller
+//we can pass params to the controller
 void TaskTwiddlerinoControl(void *pvParameters){
+  test_config_t config;
+  if (pvParameters != NULL) {
+    config = *((test_config_t *) pvParameters);
+  } else {
+    //default config
+    test_config_t config;
+    config.Kd = 0;
+    config.Kp = 1;
+    config.Ki = 0;
+    config.sample_rate_us = 1000;
+    config.set_point = 0;
+    config.test_duration_ms = -1;
+  }
 
-  uint64_t last_time = micros();
-  double Kp=0.4, Ki=0, Kd=0;
-  double Setpoint=0, Position=0, DutyCycle=0;
-  PID myPID(&Position, &DutyCycle, &Setpoint, Kp, Ki, Kd, REVERSE);
-
+  //pid config
+  double Setpoint=config.set_point, Position=0, DutyCycle=0;
+  PID myPID(&Position, &DutyCycle, &Setpoint, config.Kp, config.Ki, config.Kd, REVERSE);
   myPID.SetMode(AUTOMATIC);
-  myPID.SetSampleTime(1);
+  myPID.SetSampleTime(config.sample_rate_us/1000);
   myPID.SetOutputLimits(-255, 255);
-  myPID.SetTunings(Kp,Ki,Kd);
+  myPID.SetTunings(config.Kp, config.Ki, config.Kd);
   myPID.SetControllerDirection(REVERSE);
 
+  //time and telemetry
   uint32_t dt = 0;
   uint32_t read_dt = 0;
   uint32_t control_dt = 0;
+  uint64_t last_time = micros();
+  uint64_t start_time = millis();
   control_telemetry_t telem;
-  test_config_t test_config;
 
-  for(;;) 
+  //initial hardware state
+  motor_set_pwm(0);
+  motor_set_state(motor_state_t::MOTOR_LOW);
+  encoder_clear_count();
+
+  //wait half a second for potential deacceleration of motor
+  vTaskDelay(pdMS_TO_TICKS(500));
+
+  while(millis() - start_time < config.test_duration_ms)
   {
-    if(xQueueReceive(xQueueTelemetry, &test_config, 5) == pdTRUE){
-    }
-
     read_dt = micros();
     telem.position = encoder_get_angle();
     Position = telem.position;
@@ -224,9 +277,20 @@ void TaskTwiddlerinoControl(void *pvParameters){
     telem.control_dt = control_dt;
     telem.read_dt = read_dt;
 
+    telem.velocity = -1;
+    telem.current = -1;
+    telem.torque_external = -1;
+
     xQueueSend(xQueueTelemetry, &telem, 0);
 
     vTaskDelay(1);
   }
+
+  motor_set_pwm(0);
+  motor_set_state(motor_state_t::MOTOR_LOW);
+  encoder_clear_count();
+
+  //delete the task
+  vTaskDelete(NULL);
 }
 
