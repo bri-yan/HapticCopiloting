@@ -1,0 +1,7 @@
+{
+    "files.associations": {
+        "unity.h": "c",
+        "comms.h": "c",
+        "arduino.h": "c"
+    }
+}

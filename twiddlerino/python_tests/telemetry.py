@@ -64,33 +64,36 @@ def run_test(ser:serial.Serial,params:TestParams):
 if __name__ == "__main__":
     pos = []
     cnt = 0
-        # print("hello")
-    with serial.Serial('COM4', 115200, timeout=1) as ser:
-        while True:
-            read_str = ser.readline()
-            print(read_str)
-            try:
-                data_str = read_str.decode()
-            except Exception as e:
-                print(e)
-                continue
-            # print(data_str)
-            data_arr = data_str.split(',')
-            if data_str == 'test_complete':
-                test_complete = True
-            elif len(data_arr) == 11:
-                time_ms = float((data_arr[0].split(':'))[1])
-                loop_dt = float((data_arr[1].split(':'))[1])
-                control_dt = float((data_arr[2].split(':'))[1])
-                read_dt = float((data_arr[3].split(':'))[1])
-                pid_success_flag = float((data_arr[4].split(':'))[1])
-                position = float((data_arr[5].split(':'))[1])
-                pwm_duty_cycle = float((data_arr[6].split(':'))[1])
-                set_point = float((data_arr[7].split(':'))[1])
-                velocity = float((data_arr[8].split(':'))[1])
-                current = float((data_arr[9].split(':'))[1])
-                torque_external = float((data_arr[10].split(':'))[1])
-                print(position,'\n')
+    print("hello")
+    with serial.Serial('COM5', 115200, timeout=10) as ser:
+        ser.write(f'config_test,P,{1},I,{0},D,{0},set_point,{10}'.encode())
+        print(ser.readline())
+        
+        # while True:
+        #     read_str = ser.readline()
+        #     print(read_str)
+        #     try:
+        #         data_str = read_str.decode()
+        #     except Exception as e:
+        #         print(e)
+        #         continue
+        #     # print(data_str)
+        #     data_arr = data_str.split(',')
+        #     if data_str == 'test_complete':
+        #         test_complete = True
+        #     elif len(data_arr) == 11:
+        #         time_ms = float((data_arr[0].split(':'))[1])
+        #         loop_dt = float((data_arr[1].split(':'))[1])
+        #         control_dt = float((data_arr[2].split(':'))[1])
+        #         read_dt = float((data_arr[3].split(':'))[1])
+        #         pid_success_flag = float((data_arr[4].split(':'))[1])
+        #         position = float((data_arr[5].split(':'))[1])
+        #         pwm_duty_cycle = float((data_arr[6].split(':'))[1])
+        #         set_point = float((data_arr[7].split(':'))[1])
+        #         velocity = float((data_arr[8].split(':'))[1])
+        #         current = float((data_arr[9].split(':'))[1])
+        #         torque_external = float((data_arr[10].split(':'))[1])
+        #         print(position,'\n')
 
     # plt.plot(pos)
     # plt.show()

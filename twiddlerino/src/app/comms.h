@@ -20,7 +20,7 @@
 /*                               D E F I N E S                                */
 /******************************************************************************/
 
-#define READ_TIMEOUT_US 1000U
+#define READ_TIMEOUT_US 200U
 
 /******************************************************************************/
 /*                              T Y P E D E F S                               */
@@ -47,7 +47,7 @@ typedef struct {
 
     //other
     bool pid_success_flag;
-} control_telemetry_t;
+} telemetry_t;
 
 /**
  * @brief Command Types
@@ -77,6 +77,11 @@ typedef struct {
     double set_point;
 } test_config_t;
 
+typedef union {
+    telemetry_t telemetry_struct;
+    char buffer[sizeof(telemetry_t)];
+} telemetry_packet_t;
+
 
 /******************************************************************************/
 /*                             F U N C T I O N S                              */
@@ -85,7 +90,9 @@ typedef struct {
 //initializes Twiddlerino
 cmd_type_t decode_cmd(String *, test_config_t *);
 
-uint32_t publish_telemetry(control_telemetry_t *);
+uint32_t publish_telemetry(telemetry_t *);
+
+uint32_t publish_telemetry_raw(telemetry_t *);
 
 String read_string_until(char terminator);
 
