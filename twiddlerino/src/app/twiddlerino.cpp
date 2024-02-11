@@ -17,6 +17,7 @@
 //drivers
 #include "drivers/encoder.h"
 #include "drivers/motor.h"
+#include "drivers/current_sensor.h"
 
 //telemetry
 #include "comms.h"
@@ -84,6 +85,14 @@ void twiddlerino_setup(startup_type_t startup_type) {
     Serial.println("Entering idle mode");
     return;
   }
+
+  //hardwaire setup
+  //adc for for current sensor
+  current_sensor_init();
+  encoder_init(pcnt_unit_t::PCNT_UNIT_0, PIN_ENCODER_QUAD_A, PIN_ENCODER_QUAD_B, ENCODER_DEFAULT_FILTER);
+  motor_init(PIN_MOTOR_POWER, PIN_MOTOR_DIR_0, PIN_MOTOR_DIR_1);
+  encoder_clear_count();
+  motor_set_state(motor_state_t::MOTOR_LOW);
 
   //start telemetry on core 0
   xTaskCreatePinnedToCore(
@@ -268,12 +277,6 @@ void TaskTwiddlerinoControl(void *pvParameters){
   Serial.printf("Starting control task with params:\n\t\tKp:%lf\tKi:%lf\tKd:%lf\tsample_rate_us:%lu\ttest_duration_ms:%lu\n",
     config.Kp,config.Ki,config.Kd,config.sample_rate_us,config.test_duration_ms);
 
-  //hardwaire setup
-  encoder_init(pcnt_unit_t::PCNT_UNIT_0, PIN_ENCODER_QUAD_A, PIN_ENCODER_QUAD_B, ENCODER_DEFAULT_FILTER);
-  motor_init(PIN_MOTOR_POWER, PIN_MOTOR_DIR_0, PIN_MOTOR_DIR_1);
-  encoder_clear_count();
-  motor_set_state(motor_state_t::MOTOR_LOW);
-
   //pid config
   double Setpoint=config.set_point, Position=0, DutyCycle=0;
   PID myPID(&Position, &DutyCycle, &Setpoint, config.Kp, config.Ki, config.Kd, REVERSE);
@@ -303,6 +306,7 @@ void TaskTwiddlerinoControl(void *pvParameters){
       read_dt = micros();
       telem.position = encoder_get_angle();
       Position = telem.position;
+      telem.current = current_sensor_read();
       read_dt = micros() - read_dt;
 
       control_dt = micros();
@@ -321,7 +325,6 @@ void TaskTwiddlerinoControl(void *pvParameters){
       telem.read_dt = read_dt;
 
       telem.velocity = -1;
-      telem.current = -1;
       telem.torque_external = -1;
 
       xQueueSend(xQueueTelemetry, &telem, 0);

@@ -18,11 +18,19 @@
 /*                               D E F I N E S                                */
 /******************************************************************************/
 
+//encoder
 #define PIN_ENCODER_QUAD_A  gpio_num_t::GPIO_NUM_36  //Encoder quaderture signal A
 #define PIN_ENCODER_QUAD_B  gpio_num_t::GPIO_NUM_39   //Encoder quaderture signal b
 
+//current sensor (communicates through i2c interface)
+#define PIN_CURRENT_SENS_ADC_SCL  gpio_num_t::GPIO_NUM_22
+#define PIN_CURRENT_SENS_ADC_SDA  gpio_num_t::GPIO_NUM_21
+
+//motor
 #define PIN_MOTOR_POWER     gpio_num_t::GPIO_NUM_13  //motor power (pwm) signal
 #define PIN_MOTOR_DIR_0     gpio_num_t::GPIO_NUM_12  //motor bridge dir 0 pin
 #define PIN_MOTOR_DIR_1     gpio_num_t::GPIO_NUM_14  //motor bridge dir 1 pin
+
+
 
 #endif // TWID32_PIN_DEFS_H_
