@@ -1,8 +1,7 @@
 /**
- * @file motor.cpp
- * @brief Motor driver
- * @author Yousif El-Wishahy (ywishahy@student.ubc.ca)
- * Based on code from Oliver Schneider (oschneid@cs.ubc.ca) and Bereket Guta (bguta@cs.ubc.ca)
+ * @file current_sensor.h
+ * @brief Current sensing driver, using adc
+ * @author Gavin Pringle and Yousif El-Wishahy (ywishahy@student.ubc.ca)
  * 
  */
 
