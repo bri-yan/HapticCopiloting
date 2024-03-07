@@ -45,21 +45,38 @@ typedef enum {
 /*                             F U N C T I O N S                              */
 /******************************************************************************/
 
-//initializes motor
+/**
+ * @brief Init motor on power and directions pins
+ *
+ */
 void motor_init(const gpio_num_t motor_power_pin, const gpio_num_t motor_dir0_pin, const gpio_num_t motor_dir1_pin);
 
-//stop power to motor
+/**
+ * @brief Sets motor state to low
+ *
+ */
 void motor_stop();
 
 motor_state_t motor_set_state(motor_state_t);
 
 motor_state_t motor_get_state();
 
+/**
+ * @brief PWM frequency
+ *
+ */
 uint32_t motor_get_frequency();
 
+/**
+ * @brief PWM duty cycle
+ *
+ */
 uint32_t motor_get_duty_cycle();
 
-//sets the duty cycle to the motor
+/**
+ * @brief Sets motor pwm duty cycle
+ *  Drive direction is also set based on sign of duty cycle (drive left for dc < 0)
+ */
 void motor_set_pwm(int32_t dc);
 
 

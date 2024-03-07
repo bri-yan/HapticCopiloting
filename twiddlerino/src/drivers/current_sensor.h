@@ -23,19 +23,32 @@
 #define SHUNT_RESISTOR_OHM 1U
 
 /******************************************************************************/
-/*                              T Y P E D E F S                               */
-/******************************************************************************/
-
-/******************************************************************************/
 /*                             F U N C T I O N S                              */
 /******************************************************************************/
 
-//initializes motor
+/**
+ * @brief Init current sensor (connect to adc over I2C protocol)
+ *
+ */
 void current_sensor_init();
 
+/**
+ * @brief Returns latest current read in amps, -1 otherwise
+ *
+ */
 double current_sensor_read();
 
+/**
+ * @brief Returns latest voltage read in volts, -1 otherwise
+ *
+ */
 double current_sensor_read_voltage();
+
+/**
+ * @brief Returns samples per second rate of sensor ADC
+ *
+ */
+uint16_t current_sensor_sps();
 
 
 #endif // CURRENT_SENSOR_H_

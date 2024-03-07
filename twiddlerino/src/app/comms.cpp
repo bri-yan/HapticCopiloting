@@ -143,7 +143,7 @@ uint32_t publish_telemetry_raw(telemetry_t *telem){
     telemetry_packet_t packet;
     packet.telemetry_struct = *telem;
     Serial.print("telem");
-    Serial.write(packet.buffer, strlen(packet.buffer));
+    uint32_t size = Serial.write(packet.buffer, strlen(packet.buffer));
     Serial.print("\n");
-    return sizeof(packet.buffer);
+    return size;
 }

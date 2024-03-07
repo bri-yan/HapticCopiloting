@@ -90,7 +90,7 @@ uint32_t motor_get_duty_cycle() {
 
 void motor_set_pwm(int32_t dc)
 {
-  uint8_t pwm_duty_cycle = min(MOTOR_DUTY_CYCLE_RES, max(MOTOR_DUTY_CYCLE_RES, dc));
+  uint8_t pwm_duty_cycle = min(MOTOR_DUTY_CYCLE_RES, max(-MOTOR_DUTY_CYCLE_RES, dc));
   if (pwm_duty_cycle == 0)
   {
     motor_set_state(MOTOR_LOW);
@@ -112,15 +112,15 @@ motor_state_t motor_set_state(motor_state_t state)
    {
      case motor_state_t::MOTOR_LEFT:
        digitalWrite(dir0_pin, HIGH);
-       digitalWrite(dir0_pin, LOW);
+       digitalWrite(dir1_pin, LOW);
        break;
      case motor_state_t::MOTOR_RIGHT:
         digitalWrite(dir0_pin, LOW);
-        digitalWrite(dir0_pin, HIGH);
+        digitalWrite(dir1_pin, HIGH);
        break;
      case motor_state_t::MOTOR_LOW:
         digitalWrite(dir0_pin, LOW);
-        digitalWrite(dir0_pin, LOW);
+        digitalWrite(dir1_pin, LOW);
         break;
      default:
         if(Serial.availableForWrite()) {

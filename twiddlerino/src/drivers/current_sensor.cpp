@@ -17,16 +17,6 @@
 #include "SPI.h"
 
 /******************************************************************************/
-/*                               D E F I N E S                                */
-/******************************************************************************/
-
-/******************************************************************************/
-/*                              T Y P E D E F S                               */
-/******************************************************************************/
-
-// Typedefs that are only used in this file, empty for now
-
-/******************************************************************************/
 /*            P R I V A T E  F U N C T I O N  P R O T O T Y P E S             */
 /******************************************************************************/
 
@@ -52,8 +42,8 @@ void current_sensor_init() {
       Serial.printf("Failed to init ADS.");
     }
   }
-
-  ads.startADCReading(MUX_BY_CHANNEL[0], /*continuous=*/false);
+  ads.setDataRate(RATE_ADS1115_860SPS);
+  ads.startADCReading(MUX_BY_CHANNEL[0], true);
 }
 
 double current_sensor_read() {
@@ -65,21 +55,15 @@ double current_sensor_read_voltage() {
   return ads_read();
 }
 
+uint16_t current_sensor_sps() {
+  return ads.getDataRate();
+}
+
 
 /******************************************************************************/
 /*                      P R I V A T E  F U N C T I O N S                      */
 /******************************************************************************/
 
 double ads_read(){
-  double val = -1.0;
-    // If we don't have new data, skip this iteration.
-  if (ads.conversionComplete()) {
-    int16_t results = ads.getLastConversionResults();
-    val = ads.computeVolts(results);
-
-    // Start another conversion.
-    ads.startADCReading(MUX_BY_CHANNEL[0], /*continuous=*/false);
-  }
-
-  return val;
+  return ads.computeVolts(ads.getLastConversionResults());
 }

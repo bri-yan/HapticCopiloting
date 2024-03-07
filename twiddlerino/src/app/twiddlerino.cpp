@@ -299,7 +299,7 @@ void TaskTwiddlerinoControl(void *pvParameters){
   motor_set_state(motor_state_t::MOTOR_LOW);
   encoder_clear_count();
 
-  while(micros() - start_time < config.test_duration_ms*1000.0)
+  while(config.test_duration_ms <= 0 || micros() - start_time < config.test_duration_ms*1000.0)
   {
     if(micros() - last_time >= config.sample_rate_us) {
       dt = micros() - last_time;

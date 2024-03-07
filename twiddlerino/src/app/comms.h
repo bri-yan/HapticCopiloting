@@ -77,6 +77,10 @@ typedef struct {
     double set_point;
 } test_config_t;
 
+/**
+ * @brief Packet for raw telemetry
+ * 
+ */
 typedef union {
     telemetry_t telemetry_struct;
     char buffer[sizeof(telemetry_t)];
@@ -90,8 +94,16 @@ typedef union {
 //initializes Twiddlerino
 cmd_type_t decode_cmd(String *, test_config_t *);
 
+/**
+ * @brief Publish comma seperated telemetry string (utf-8) over serial
+ * 
+ */
 uint32_t publish_telemetry(telemetry_t *);
 
+/**
+ * @brief Publish raw bytes over serials (saves space)
+ * 
+ */
 uint32_t publish_telemetry_raw(telemetry_t *);
 
 String read_string_until(char terminator);

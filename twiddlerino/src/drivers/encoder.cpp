@@ -32,23 +32,16 @@
 #define LOCK_ACQUIRE() _lock_acquire(&isr_service_install_lock)
 #define LOCK_RELEASE() _lock_release(&isr_service_install_lock)
 
+//16 bit counter limit
 #define PCNT_H_LIM 32766
 #define PCNT_L_LIM -32766
-
-
-/******************************************************************************/
-/*                              T Y P E D E F S                               */
-/******************************************************************************/
-
-// Typedefs that are only used in this file
 
 /******************************************************************************/
 /*            P R I V A T E  F U N C T I O N  P R O T O T Y P E S             */
 /******************************************************************************/
 
-static void set_motor_direction(uint8_t md);
-static void set_motor_speed(uint8_t spd);
-
+//this interrupt is called on configured count events
+//in our case, every time count increments
 static void encoder_pcnt_overflow_interrupt_handler(void *arg);
 
 /******************************************************************************/
@@ -67,12 +60,6 @@ static pcnt_unit_t encoder_pcnt_unit = PCNT_UNIT_0;
 //This is updated by an interrupt and likely not atomic!
 //use lock/mutex when reading/writing to this variable
 static volatile int64_t encoder_accu_cnt = 0;
-
-/******************************************************************************/
-/*                P U B L I C  G L O B A L  V A R I A B L E S                 */
-/******************************************************************************/
-
-// Global variable definitions matching the extern definitions in the header
 
 /******************************************************************************/
 /*                       P U B L I C  F U N C T I O N S                       */
@@ -129,11 +116,14 @@ void encoder_init(pcnt_unit_t unit, gpio_num_t quad_pin_a, gpio_num_t quad_pin_b
     }
     LOCK_RELEASE();
 
+    //attach interrupt handler
     pcnt_isr_handler_add(encoder_pcnt_unit, encoder_pcnt_overflow_interrupt_handler, NULL);
 
+    //configure events for interrupt
+    //trigger on limit overflow
     pcnt_event_enable(encoder_pcnt_unit, PCNT_EVT_H_LIM);
     pcnt_event_enable(encoder_pcnt_unit, PCNT_EVT_L_LIM);
-
+    //trigger on decrement / increment
     pcnt_set_event_value(encoder_pcnt_unit, PCNT_EVT_THRES_0, -1);
     pcnt_set_event_value(encoder_pcnt_unit, PCNT_EVT_THRES_1, 1);
     pcnt_event_enable(encoder_pcnt_unit, PCNT_EVT_THRES_0);
@@ -147,6 +137,7 @@ void encoder_init(pcnt_unit_t unit, gpio_num_t quad_pin_a, gpio_num_t quad_pin_b
         pcnt_filter_disable(encoder_pcnt_unit);
     }
 
+    //enable interrupt and resume count
     pcnt_intr_enable(encoder_pcnt_unit);
     pcnt_counter_resume(encoder_pcnt_unit);
 }
@@ -158,6 +149,7 @@ void encoder_pause()
 
 void encoder_terminate()
 {
+    //disable all things enabled in setup
     pcnt_set_filter_value(encoder_pcnt_unit, 0);
     pcnt_filter_disable(encoder_pcnt_unit);
     pcnt_counter_pause(encoder_pcnt_unit);
@@ -213,6 +205,7 @@ static void encoder_pcnt_overflow_interrupt_handler(void *arg)
 
     pcnt_get_event_status(encoder_pcnt_unit, &status);
 
+    //check each event and increment count accordingly
     if (status & PCNT_EVT_H_LIM) {
         encoder_accu_cnt += PCNT_H_LIM;
         pcnt_counter_clear(encoder_pcnt_unit);
