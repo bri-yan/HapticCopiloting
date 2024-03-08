@@ -16,6 +16,9 @@
 #include "Adafruit_ADS1X15.h"
 #include "SPI.h"
 
+//ring buffer for measurements
+#include "freertos/ringbuf.h"
+
 /******************************************************************************/
 /*            P R I V A T E  F U N C T I O N  P R O T O T Y P E S             */
 /******************************************************************************/
@@ -28,6 +31,7 @@ double ads_read();
 
 //motor pwm timer channel
 static Adafruit_ADS1115 ads;
+static RingbufHandle_t cur_sens_buffer;
 
 /******************************************************************************/
 /*                       P U B L I C  F U N C T I O N S                       */
@@ -42,8 +46,12 @@ void current_sensor_init() {
       Serial.printf("Failed to init ADS.");
     }
   }
+
   ads.setDataRate(RATE_ADS1115_860SPS);
   ads.startADCReading(MUX_BY_CHANNEL[0], true);
+
+  //init the measurement buffer
+  cur_sens_buffer = xRingbufferCreate(1028, RINGBUF_TYPE_NOSPLIT);
 }
 
 double current_sensor_read() {

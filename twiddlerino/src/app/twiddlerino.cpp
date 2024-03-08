@@ -23,6 +23,8 @@
 #include "comms.h"
 //control
 #include "PID_v1.h"
+//filters
+#include "filter/ewma_filter.h"
 
 //arduino
 #include "Arduino.h"
@@ -34,7 +36,7 @@
 
 #define TELEMETRY_QUEUE_SIZE 1000U
 #define COMMAND_QUEUE_SIZE 10U
-#define UART_BAUD_RATE 250000U
+#define UART_BAUD_RATE 500000U
 
 /******************************************************************************/
 /*                              T Y P E D E F S                               */
@@ -50,6 +52,7 @@
 void TaskReadCommands(void *pvParameters);
 void TaskPublishTelemetry(void *pvParameters);
 void TaskTwiddlerinoControl(void *pvParameters);
+void TaskTestTControl(void *pvParameters);
 
 /******************************************************************************/
 /*               P R I V A T E  G L O B A L  V A R I A B L E S                */
@@ -147,6 +150,21 @@ void twiddlerino_setup(startup_type_t startup_type) {
       ,  1
     );
     Serial.printf("Control Task Initialized.\nTask Status: %i\n",eTaskGetState(xDefaultControlTask));
+  }
+
+  if (startup_type == startup_type_t::RUN_TCONTROL_DEFAULT) {
+    //start task
+    TaskHandle_t xDefaultControlTask;
+    xTaskCreatePinnedToCore(
+      TaskTestTControl
+      ,  "Twiddlerino T Control"
+      ,  8192
+      ,  NULL
+      ,  configMAX_PRIORITIES
+      ,  &xDefaultControlTask
+      ,  1
+    );
+    Serial.printf("T Control Task Initialized.\nTask Status: %i\n",eTaskGetState(xDefaultControlTask));
   }
 }
 
@@ -251,7 +269,8 @@ void TaskPublishTelemetry(void *pvParameters) {
   for(;;) 
   {
     if(Serial.availableForWrite() && xQueueReceive(xQueueTelemetry, &t, 20) == pdTRUE){
-      publish_telemetry(&t);
+      // publish_telemetry(&t);
+      publish_telemetry_serial_studio(&t);
     }
     vTaskDelay( 1 );
   }
@@ -286,6 +305,9 @@ void TaskTwiddlerinoControl(void *pvParameters){
   myPID.SetTunings(config.Kp, config.Ki, config.Kd);
   myPID.SetControllerDirection(REVERSE);
 
+  //velocity filter
+  EwmaFilter EWMA(0.05, 0.0);
+
   //time and telemetry
   uint32_t dt = 0;
   uint32_t read_dt = 0;
@@ -302,35 +324,65 @@ void TaskTwiddlerinoControl(void *pvParameters){
   while(config.test_duration_ms <= 0 || micros() - start_time < config.test_duration_ms*1000.0)
   {
     if(micros() - last_time >= config.sample_rate_us) {
+      //sensor read segment
       dt = micros() - last_time;
       read_dt = micros();
       telem.position = encoder_get_angle();
       Position = telem.position;
-      telem.current = current_sensor_read();
+      telem.current = -1;//current_sensor_read();
+      telem.velocity = encoder_get_velocity();
+      telem.filtered_velocity = EWMA(telem.velocity);
+      telem.current_sps = current_sensor_sps();
+      telem.pwm_frequency = motor_get_frequency();
       read_dt = micros() - read_dt;
 
+      //pid calculation and control segment
       control_dt = micros();
       telem.pid_success_flag = myPID.Compute();
-      telem.pid_success_flag = 0;
-      motor_set_pwm(DutyCycle);
+      telem.pwm_duty_cycle = motor_set_pwm(DutyCycle);
       control_dt = micros() - control_dt;
 
-      telem.pwm_duty_cycle = DutyCycle;
+      //fill and return telemetry structure
       telem.set_point = Setpoint;
-
       telem.timestamp_ms = (micros() - start_time)/1000.0;
       last_time+=dt;
       telem.loop_dt = dt;
       telem.control_dt = control_dt;
       telem.read_dt = read_dt;
 
-      telem.velocity = -1;
       telem.torque_external = -1;
 
       xQueueSend(xQueueTelemetry, &telem, 0);
     }
 
     vTaskDelay(0);
+  }
+
+  motor_set_pwm(0);
+  motor_set_state(motor_state_t::MOTOR_LOW);
+  encoder_clear_count();
+  Serial.printf("test_complete\n");
+
+  //delete the task
+  vTaskDelete(NULL);
+}
+
+#include "app/control/twid_control.h"
+void TaskTestTControl(void *pvParameters){
+  INIT_CONTROLLER_CONFIG(control_config);
+  control_config.telem_queue_handle = &xQueueTelemetry;
+  control_config.sample_time_us = 500;
+
+  //initial hardware state
+  encoder_clear_count();
+
+  tcontrol_configure(&control_config);
+  tcontrol_start();
+  Serial.printf("controller runnning: %i\n",tcontrol_is_running());
+
+  for(;;)
+  {
+    vTaskDelay(5);
   }
 
   motor_set_pwm(0);

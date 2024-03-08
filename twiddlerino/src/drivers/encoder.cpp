@@ -60,6 +60,9 @@ static pcnt_unit_t encoder_pcnt_unit = PCNT_UNIT_0;
 //This is updated by an interrupt and likely not atomic!
 //use lock/mutex when reading/writing to this variable
 static volatile int64_t encoder_accu_cnt = 0;
+static volatile int64_t encoder_last_cnt = 0;
+static volatile uint64_t encoder_last_time = 0;
+static volatile double encoder_cnt_velocity = 0.0;
 
 /******************************************************************************/
 /*                       P U B L I C  F U N C T I O N S                       */
@@ -69,6 +72,8 @@ void encoder_init(pcnt_unit_t unit, gpio_num_t quad_pin_a, gpio_num_t quad_pin_b
 
     //init value
     encoder_accu_cnt = 0;
+    encoder_last_cnt = 0;
+    encoder_last_time = 0;
     encoder_pcnt_unit = unit;
 
     //pins
@@ -87,7 +92,6 @@ void encoder_init(pcnt_unit_t unit, gpio_num_t quad_pin_a, gpio_num_t quad_pin_b
         .counter_l_lim = PCNT_L_LIM,
         .unit = encoder_pcnt_unit,
         .channel = PCNT_CHANNEL_0
-
     };
     pcnt_unit_config(&dev_config);
 
@@ -160,6 +164,8 @@ void encoder_terminate()
     pcnt_isr_service_uninstall();
     pcnt_intr_disable(encoder_pcnt_unit);
     encoder_accu_cnt = 0;
+    encoder_last_cnt = 0;
+    encoder_last_time = 0;
 }
 
 void encoder_clear_count()
@@ -168,6 +174,8 @@ void encoder_clear_count()
     pcnt_counter_clear(encoder_pcnt_unit);
     _ENTER_CRITICAL();
     encoder_accu_cnt = 0;
+    encoder_last_cnt = 0;
+    encoder_last_time = 0;
     _EXIT_CRITICAL();
     pcnt_counter_resume(encoder_pcnt_unit);
 }
@@ -180,18 +188,31 @@ int64_t encoder_get_count()
     _ENTER_CRITICAL();
     rval = encoder_accu_cnt + cval;
     _EXIT_CRITICAL();
+
     return rval;
 }
 
 double encoder_get_angle()
 {
-    return (encoder_get_count() / (ENCODER_CPR*2.0) * 360);
+    return ((encoder_get_count() / (ENCODER_CPR*2.0)) * 360);
 }
+
+double encoder_get_velocity()
+{
+    return (encoder_cnt_velocity / (ENCODER_CPR*2.0)) * 360;
+}
+
 
 double encoder_get_angle_rad()
 {
     return encoder_get_angle() * DEGREES_TO_RADIANS;
 }
+
+double encoder_get_velocity_rad()
+{
+    return encoder_get_velocity() * DEGREES_TO_RADIANS;
+}
+
 
 /******************************************************************************/
 /*                      P R I V A T E  F U N C T I O N S                      */
@@ -218,6 +239,12 @@ static void encoder_pcnt_overflow_interrupt_handler(void *arg)
 		encoder_accu_cnt += cval;
 		pcnt_counter_clear(encoder_pcnt_unit);
     }
+
+    int64_t dcount = encoder_accu_cnt - encoder_last_cnt;
+    encoder_last_cnt = encoder_accu_cnt;
+    uint64_t dt = micros() - encoder_last_time;
+    encoder_last_time = micros();
+    encoder_cnt_velocity = ( ( dcount * 1.0e6 ) / dt );
 
     _EXIT_CRITICAL();
 }

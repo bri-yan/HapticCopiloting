@@ -37,13 +37,18 @@ typedef struct {
     uint32_t read_dt;
     uint32_t control_dt;
 
-    //state variables
+    //control variables
     double set_point;
+    double error;
+
     double position;
     double velocity;
+    double filtered_velocity;
     double current;
     double torque_external;
     double pwm_duty_cycle;
+    uint32_t pwm_frequency;
+    double current_sps;
 
     //other
     bool pid_success_flag;
@@ -101,10 +106,16 @@ cmd_type_t decode_cmd(String *, test_config_t *);
 uint32_t publish_telemetry(telemetry_t *);
 
 /**
- * @brief Publish raw bytes over serials (saves space)
+ * @brief Publish (utf-8) string encoded to be read by serial studio telemetry app
  * 
  */
-uint32_t publish_telemetry_raw(telemetry_t *);
+uint32_t publish_telemetry_serial_studio(telemetry_t *telem);
+
+// /**
+//  * @brief Publish raw bytes over serials (saves space)
+//  * 
+//  */
+// uint32_t publish_telemetry_raw(telemetry_t *);
 
 String read_string_until(char terminator);
 

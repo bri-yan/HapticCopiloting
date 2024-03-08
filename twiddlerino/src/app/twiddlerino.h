@@ -35,7 +35,8 @@ typedef enum {
     IDLE,
     RUN_CONTROLLER_DEFAULT,
     RUN_TELEMETRY_ONLY,
-    RUN_AWAIT_COMMANDS
+    RUN_AWAIT_COMMANDS,
+    RUN_TCONTROL_DEFAULT
 } startup_type_t;
 
 /******************************************************************************/

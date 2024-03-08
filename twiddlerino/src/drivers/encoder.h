@@ -75,8 +75,18 @@ void encoder_clear_count();
 double encoder_get_angle();
 
 /**
+ * @brief Returns encoder last measured velocity in degrees/second
+ */
+double encoder_get_velocity();
+
+/**
  * @brief Returns encoder angle in radians
  */
 double encoder_get_angle_rad();
+
+/**
+ * @brief Returns encoder last measured velocity in radians/second
+ */
+double encoder_get_velocity_rad();
 
 #endif // ENCODER_H_

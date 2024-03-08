@@ -106,10 +106,27 @@ cmd_type_t decode_cmd(String * read_string, test_config_t *t) {
 }
 
 uint32_t publish_telemetry(telemetry_t *telem) {
-    uint32_t size = -1;
+    uint32_t size = 0;
     telemetry_t t = *telem;
-    size = Serial.printf("telem,time_ms:%lu,loop_dt:%lu,control_dt:%lu,read_dt:%lu,pid_success_flag:%i,position:%lf,pwm_duty_cycle:%lf,set_point:%f,velocity:%lf,current:%lf,torque_external:%lf,\n", 
-    t.timestamp_ms, t.loop_dt, t.control_dt, t.read_dt, t.pid_success_flag, t.position, t.pwm_duty_cycle, t.set_point, t.velocity, t.current, t.torque_external);
+    if(Serial) {
+        size = Serial.printf("telem,time_ms:%lu,loop_dt:%lu,control_dt:%lu,read_dt:%lu,pid_success_flag:%i,position:%lf,pwm_duty_cycle:%lf,set_point:%f,velocity:%lf,current:%lf,torque_external:%lf,\n", 
+            t.timestamp_ms, t.loop_dt, t.control_dt, t.read_dt, t.pid_success_flag, t.position, t.pwm_duty_cycle, t.set_point, t.velocity, t.current, t.torque_external);
+    }
+    return size;
+}
+
+//Serial studio frames are read as "/*TITLE,%s,%s,%s,...,%s*/"
+//start of frame: /*
+//end of frame: */
+//docs https://github.com/Serial-Studio/Serial-Studio/wiki/Communication-Protocol
+uint32_t publish_telemetry_serial_studio(telemetry_t *telem) {
+    uint32_t size = 0;
+    telemetry_t t = *telem;
+    if(Serial) {
+
+        size = Serial.printf("/*TWIDDLERINO_TELEMETRY,%lu,%lu,%lu,%lu,%i,%lf,%lf,%lu,%lf,%lf,%lf,%lf,%lf*/\n", 
+            t.timestamp_ms, t.loop_dt, t.control_dt, t.read_dt, t.pid_success_flag, t.position, t.pwm_duty_cycle, t.pwm_frequency, t.set_point, t.velocity, t.filtered_velocity, t.current, t.torque_external);
+    }
     return size;
 }
 
@@ -139,11 +156,11 @@ char timed_read(){
     return -1;     // -1 indicates timeout
 }
 
-uint32_t publish_telemetry_raw(telemetry_t *telem){
-    telemetry_packet_t packet;
-    packet.telemetry_struct = *telem;
-    Serial.print("telem");
-    uint32_t size = Serial.write(packet.buffer, strlen(packet.buffer));
-    Serial.print("\n");
-    return size;
-}
+// uint32_t publish_telemetry_raw(telemetry_t *telem){
+//     telemetry_packet_t packet;
+//     packet.telemetry_struct = *telem;
+//     Serial.print("telem");
+//     uint32_t size = Serial.write(packet.buffer, strlen(packet.buffer));
+//     Serial.print("\n");
+//     return size;
+// }

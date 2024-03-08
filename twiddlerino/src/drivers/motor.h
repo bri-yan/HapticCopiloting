@@ -77,7 +77,7 @@ uint32_t motor_get_duty_cycle();
  * @brief Sets motor pwm duty cycle
  *  Drive direction is also set based on sign of duty cycle (drive left for dc < 0)
  */
-void motor_set_pwm(int32_t dc);
+int32_t motor_set_pwm(int32_t dc);
 
 
 #endif // MOTOR_H_
