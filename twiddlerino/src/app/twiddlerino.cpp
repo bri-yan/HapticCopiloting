@@ -131,9 +131,9 @@ void twiddlerino_setup(startup_type_t startup_type) {
     test_config.Kd = 0;
     test_config.Kp = 1;
     test_config.Ki = 0;
-    test_config.sample_rate_us = 1000;
+    test_config.sample_rate_us = 50000;
     test_config.set_point = 0;
-    test_config.test_duration_ms = -1;
+    test_config.test_duration_ms = 100000;
 
     //start task
     TaskHandle_t xDefaultControlTask;
@@ -271,7 +271,7 @@ void TaskTwiddlerinoControl(void *pvParameters){
     config.Ki = 0;
     config.sample_rate_us = 1000;
     config.set_point = 0;
-    config.test_duration_ms = -1;
+    config.test_duration_ms = 10000;
   }
 
   Serial.printf("Starting control task with params:\n\t\tKp:%lf\tKi:%lf\tKd:%lf\tsample_rate_us:%lu\ttest_duration_ms:%lu\n",

@@ -11,7 +11,7 @@
 // const startup_type_t mode = startup_type_t::RUN_CONTROLLER_DEFAULT;
 void setup() {
   //everything is setup here
-  twiddlerino_setup(startup_type_t::RUN_AWAIT_COMMANDS);
+  twiddlerino_setup(startup_type_t::RUN_CONTROLLER_DEFAULT);
 }
 
 void loop() {
