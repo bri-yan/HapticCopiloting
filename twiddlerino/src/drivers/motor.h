@@ -23,8 +23,8 @@
 /******************************************************************************/
 
 #define MOTOR_PWM_FREQ 32000U
-#define MOTOR_DUTY_CYCLE_RES_BITS 8U
-#define MOTOR_DUTY_CYCLE_RES 255
+#define MOTOR_DUTY_CYCLE_RES_BITS 10U
+#define MOTOR_DUTY_CYCLE_RES 1024
 
 /******************************************************************************/
 /*                              T Y P E D E F S                               */

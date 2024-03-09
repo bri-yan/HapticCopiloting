@@ -14,6 +14,7 @@
 
 #include "Arduino.h"
 #include "app/comms.h"
+#include "drivers/motor.h"
 
 /******************************************************************************/
 /*                               D E F I N E S                                */
@@ -28,11 +29,11 @@
     .sample_time_us = 1000,\
     .Kp = 0.5, .Ki = 0.01, .Kd = 0.01, .N = 1.0,\
     .velocity_filter_const = 0.01,\
-    .current_filter_const = 0.01,\
+    .current_filter_const = 0.1,\
     .torque_Kv = 0.025,\
     .torque_Ke = 0.011,\
     .impedance = {.K = 1e-3, .B = 0.01, .J = 1e-6},\
-    .output_hlim = 255, .output_llim = -255\
+    .output_hlim = MOTOR_DUTY_CYCLE_RES, .output_llim = -MOTOR_DUTY_CYCLE_RES\
 }
 
 /******************************************************************************/
@@ -67,6 +68,13 @@ typedef struct {
 } virtual_impedance_t;
 
 typedef struct {
+    double pos;
+    double vel;
+    double accel;
+    double torque;
+} setpoint_t;
+
+typedef struct {
     //telemetry
     QueueHandle_t* telem_queue_handle;
 
@@ -92,6 +100,44 @@ typedef struct {
 } controller_config_t;
 
 /******************************************************************************/
+/*                                 C L A S S                                  */
+/******************************************************************************/
+
+//discrete pid class to carry out calculation
+//https://www.cds.caltech.edu/~murray/courses/cds101/fa02/caltech/astrom-ch6.pdf
+//should be called only at discrete intervals h seconds
+class DiscretePID {
+  public:
+    DiscretePID(double kp, double ki, double kd, double h);
+    DiscretePID(double kp, double ki, double kd, double h, double N);
+    DiscretePID(controller_config_t* cfg);
+    ~DiscretePID();
+    void reinit();
+    void set_all_params(controller_config_t* cfg);
+    void set_gains(double kp, double ki, double kd);
+    void set_direction(controller_direction_t dir);
+    void set_limits(int32_t high, int32_t low);
+    double compute(double measured, double setpoint);
+    double get_error();
+    double get_kp();
+    double get_ki();
+    double get_kd();
+
+  private:
+    controller_direction_t direction = controller_direction_t::NEGATIVE_FEEDBACK;
+    int32_t OUTPUT_MAX = MOTOR_DUTY_CYCLE_RES;
+    int32_t OUTPUT_MIN = -MOTOR_DUTY_CYCLE_RES;
+    double Kp = 0.0, Ki = 0.0, Kd = 0.0; //pid params
+    double h; //controller discrete step time in seconds
+    double N; //derivative filter constant
+    double last_measured;
+    double last_setpoint;
+    double last_output;
+    double last_derivative;
+    double integral_sum;
+};
+
+/******************************************************************************/
 /*                             F U N C T I O N S                              */
 /******************************************************************************/
 
@@ -105,15 +151,10 @@ void tcontrol_reset();
 
 bool tcontrol_is_running();
 
-// void tcontrol_get_telem(telemetry_t*);
-
-void tcontrol_update_setpoint(double);
+void tcontrol_update_trajectory(setpoint_t*);
 
 void tcontrol_update_tunings(double kp, double ki, double kd, controller_direction_t dir);
-void tcontrol_update_tunings(controller_config_t* config);
 
-double tcontrol_get_kp();
-double tcontrol_get_ki();
-double tcontrol_get_kd();
+void tcontrol_update_tunings(controller_config_t* config);
 
 #endif //TWID_CONTROL_H_

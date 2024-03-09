@@ -51,6 +51,7 @@ typedef struct {
     double pwm_duty_cycle;
     uint32_t pwm_frequency; //in Hz
     double current_sps; //current sensor ADC samples/second
+    setpoint_t target;
 
     //other
     bool pid_success_flag;
