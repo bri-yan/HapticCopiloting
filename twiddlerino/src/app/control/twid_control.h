@@ -19,6 +19,22 @@
 /*                               D E F I N E S                                */
 /******************************************************************************/
 
+//macro for struct (partial) init to fill out default controller parameters
+//CHANGE CONTROLLER DEFAULT CONFIG HERE!!!!
+#define INIT_CONTROLLER_CONFIG(X) controller_config_t X = {\
+    .control_type = control_type_t::POSITION_CTRL,\
+    .setpoint_type = setpoint_type_t::CONSTANT_SETPOINT_MODE,\
+    .controller_direction = controller_direction_t::NEGATIVE_FEEDBACK,\
+    .sample_time_us = 1000,\
+    .Kp = 0.5, .Ki = 0.01, .Kd = 0.01, .N = 1.0,\
+    .velocity_filter_const = 0.01,\
+    .current_filter_const = 0.01,\
+    .torque_Kv = 0.025,\
+    .torque_Ke = 0.011,\
+    .impedance = {.K = 1e-3, .B = 0.01, .J = 1e-6},\
+    .output_hlim = 255, .output_llim = -255\
+}
+
 /******************************************************************************/
 /*                              T Y P E D E F S                               */
 /******************************************************************************/
@@ -37,6 +53,19 @@ typedef enum {
     NO_TRAJECTORY_MODE
 } setpoint_type_t;
 
+
+typedef enum {
+    POSITIVE_FEEDBACK,
+    NEGATIVE_FEEDBACK
+} controller_direction_t;
+
+//struct to contain virtual impedance params
+typedef struct {
+    double K;//stiffness
+    double B;//damping
+    double J;//intertia
+} virtual_impedance_t;
+
 typedef struct {
     //telemetry
     QueueHandle_t* telem_queue_handle;
@@ -44,31 +73,23 @@ typedef struct {
     //config
     control_type_t control_type;
     setpoint_type_t setpoint_type;
+
+    //pid params
+    controller_direction_t controller_direction;
     uint32_t sample_time_us;
     double Kp;
     double Ki;
     double Kd;
-    double torque_gain;
-    double velocity_filter_const;
-    double torque_Kv;
-    double torque_Ke;
+    double N; //derivative filter coefficient , typically in range of 8 to 20
+    double velocity_filter_const; //for velocity ewma filter
+    double current_filter_const; //for current ewma filter
+    double torque_Kv; //motor damping constant (empircal)
+    double torque_Ke; //motor torque constant (empircal)
+    virtual_impedance_t impedance;
 
     int32_t output_hlim;
     int32_t output_llim;
 } controller_config_t;
-
-//macro for struct (partial) init to fill out default controller parameters
-#define INIT_CONTROLLER_CONFIG(X) controller_config_t X = {\
-    .control_type = control_type_t::POSITION_CTRL,\
-    .setpoint_type = setpoint_type_t::CONSTANT_SETPOINT_MODE,\
-    .sample_time_us = 1000,\
-    .Kp = 0.5, .Ki = 0.0, .Kd = 0.0,\
-    .torque_gain = 0.0,\
-    .velocity_filter_const = 0.01,\
-    .torque_Kv = 0.001,\
-    .torque_Ke = 0.001,\
-    .output_hlim = 255, .output_llim = -255\
-    }
 
 /******************************************************************************/
 /*                             F U N C T I O N S                              */
@@ -88,6 +109,11 @@ bool tcontrol_is_running();
 
 void tcontrol_update_setpoint(double);
 
-void tcontrol_update_tunings(double, double, double);
+void tcontrol_update_tunings(double kp, double ki, double kd, controller_direction_t dir);
+void tcontrol_update_tunings(controller_config_t* config);
+
+double tcontrol_get_kp();
+double tcontrol_get_ki();
+double tcontrol_get_kd();
 
 #endif //TWID_CONTROL_H_

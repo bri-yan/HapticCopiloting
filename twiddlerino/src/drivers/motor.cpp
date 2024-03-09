@@ -97,11 +97,11 @@ int32_t motor_set_pwm(int32_t dc)
   }
   else if (pwm_duty_cycle < 0)
   {
-    motor_set_state(MOTOR_LEFT);
+    motor_set_state(MOTOR_DRIVE_CCW);
     ledcWrite(motor_pwm_channel, abs(pwm_duty_cycle));
   } else
   {
-    motor_set_state(MOTOR_RIGHT);
+    motor_set_state(MOTOR_DRIVE_CW);
     ledcWrite(motor_pwm_channel, abs(pwm_duty_cycle));
   }
 
@@ -112,11 +112,11 @@ motor_state_t motor_set_state(motor_state_t state)
 {
    switch(state)
    {
-     case motor_state_t::MOTOR_LEFT:
+     case motor_state_t::MOTOR_DRIVE_CCW:
        digitalWrite(dir0_pin, HIGH);
        digitalWrite(dir1_pin, LOW);
        break;
-     case motor_state_t::MOTOR_RIGHT:
+     case motor_state_t::MOTOR_DRIVE_CW:
         digitalWrite(dir0_pin, LOW);
         digitalWrite(dir1_pin, HIGH);
        break;

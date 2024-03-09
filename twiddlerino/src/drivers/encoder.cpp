@@ -63,6 +63,7 @@ static volatile int64_t encoder_accu_cnt = 0;
 static volatile int64_t encoder_last_cnt = 0;
 static volatile uint64_t encoder_last_time = 0;
 static volatile double encoder_cnt_velocity = 0.0;
+static volatile double encoder_cnt_last_velocity = 0.0;
 
 /******************************************************************************/
 /*                       P U B L I C  F U N C T I O N S                       */
@@ -74,6 +75,9 @@ void encoder_init(pcnt_unit_t unit, gpio_num_t quad_pin_a, gpio_num_t quad_pin_b
     encoder_accu_cnt = 0;
     encoder_last_cnt = 0;
     encoder_last_time = 0;
+    encoder_cnt_velocity = 0.0;
+    encoder_cnt_last_velocity = 0.0;
+
     encoder_pcnt_unit = unit;
 
     //pins
@@ -163,6 +167,8 @@ void encoder_terminate()
     pcnt_isr_handler_remove(encoder_pcnt_unit);
     pcnt_isr_service_uninstall();
     pcnt_intr_disable(encoder_pcnt_unit);
+    encoder_cnt_velocity = 0.0;
+    encoder_cnt_last_velocity = 0.0;
     encoder_accu_cnt = 0;
     encoder_last_cnt = 0;
     encoder_last_time = 0;
@@ -173,6 +179,8 @@ void encoder_clear_count()
     pcnt_counter_pause(encoder_pcnt_unit);
     pcnt_counter_clear(encoder_pcnt_unit);
     _ENTER_CRITICAL();
+    encoder_cnt_velocity = 0.0;
+    encoder_cnt_last_velocity = 0.0;
     encoder_accu_cnt = 0;
     encoder_last_cnt = 0;
     encoder_last_time = 0;
@@ -199,6 +207,16 @@ double encoder_get_angle()
 
 double encoder_get_velocity()
 {
+    _ENTER_CRITICAL();
+    if (micros() - encoder_last_time > ENCODER_VELOCITY_READ_TIMEOUT_US)  {
+        //if no new encoder ticks after timeout, set velocity to 0
+        encoder_cnt_velocity = 0.0;
+    } else if (encoder_accu_cnt == encoder_last_cnt 
+    && encoder_cnt_velocity == encoder_cnt_last_velocity) {
+        encoder_cnt_last_velocity = encoder_cnt_velocity;
+        encoder_cnt_velocity = 0.0;
+    }
+    _EXIT_CRITICAL();
     return (encoder_cnt_velocity / (ENCODER_CPR*2.0)) * 360;
 }
 
@@ -244,6 +262,7 @@ static void encoder_pcnt_overflow_interrupt_handler(void *arg)
     encoder_last_cnt = encoder_accu_cnt;
     uint64_t dt = micros() - encoder_last_time;
     encoder_last_time = micros();
+    encoder_cnt_last_velocity = encoder_cnt_velocity;
     encoder_cnt_velocity = ( ( dcount * 1.0e6 ) / dt );
 
     _EXIT_CRITICAL();

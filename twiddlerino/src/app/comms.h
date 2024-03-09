@@ -40,15 +40,17 @@ typedef struct {
     //control variables
     double set_point;
     double error;
-
-    double position;
-    double velocity;
-    double filtered_velocity;
-    double current;
-    double torque_external;
+    double position; //position in deg
+    double velocity; //velocity in deg/s
+    double filtered_velocity; //low pass filtered velocity
+    double current; //in amps
+    double filtered_current; //low pass filtered current
+    double torque_net; //net torque
+    double torque_control; //expected control torque
+    double torque_external; //estimated external torque
     double pwm_duty_cycle;
-    uint32_t pwm_frequency;
-    double current_sps;
+    uint32_t pwm_frequency; //in Hz
+    double current_sps; //current sensor ADC samples/second
 
     //other
     bool pid_success_flag;

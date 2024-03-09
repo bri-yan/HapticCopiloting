@@ -15,6 +15,7 @@
 #include "Arduino.h"
 
 #include "twiddlerino.h"
+#include "app/control/twid_control.h"
 
 /******************************************************************************/
 /*                               D E F I N E S                                */
@@ -124,8 +125,10 @@ uint32_t publish_telemetry_serial_studio(telemetry_t *telem) {
     telemetry_t t = *telem;
     if(Serial) {
 
-        size = Serial.printf("/*TWIDDLERINO_TELEMETRY,%lu,%lu,%lu,%lu,%i,%lf,%lf,%lu,%lf,%lf,%lf,%lf,%lf*/\n", 
-            t.timestamp_ms, t.loop_dt, t.control_dt, t.read_dt, t.pid_success_flag, t.position, t.pwm_duty_cycle, t.pwm_frequency, t.set_point, t.velocity, t.filtered_velocity, t.current, t.torque_external);
+        size = Serial.printf("/*TWIDDLERINO_TELEMETRY,%lu,%lu,%lu,%lu,%i,%lf,%lf,%lu,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf*/\n", 
+            t.timestamp_ms, t.loop_dt, t.control_dt, t.read_dt, t.pid_success_flag, t.position, t.pwm_duty_cycle, 
+            t.pwm_frequency, t.set_point, t.velocity, t.filtered_velocity, t.current, t.torque_external, t.torque_control,
+            t.torque_net, t.filtered_current);
     }
     return size;
 }

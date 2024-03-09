@@ -35,8 +35,8 @@
  * 
  */
 typedef enum {
-    MOTOR_LEFT, 
-    MOTOR_RIGHT,
+    MOTOR_DRIVE_CCW, 
+    MOTOR_DRIVE_CW,
     MOTOR_LOW,
     MOTOR_NOT_INITIALIZED = -1,
 } motor_state_t;

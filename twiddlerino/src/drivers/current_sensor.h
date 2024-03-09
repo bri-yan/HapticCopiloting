@@ -21,7 +21,6 @@
 /******************************************************************************/
 
 #define SHUNT_RESISTOR_OHM 1U
-#define CUR_SENS_BUFFER_SIZE 1028U
 
 /******************************************************************************/
 /*                             F U N C T I O N S                              */
@@ -34,13 +33,13 @@
 void current_sensor_init();
 
 /**
- * @brief Returns latest current read in amps, -1 otherwise
+ * @brief Returns latest current read in amps
  *
  */
 double current_sensor_read();
 
 /**
- * @brief Returns latest voltage read in volts, -1 otherwise
+ * @brief Returns latest voltage read in volts
  *
  */
 double current_sensor_read_voltage();

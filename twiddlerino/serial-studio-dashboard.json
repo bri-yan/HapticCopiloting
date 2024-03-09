@@ -191,6 +191,48 @@
                     "units": "deg/s",
                     "value": "%12",
                     "widget": ""
+                },
+                {
+                    "alarm": 0,
+                    "fft": false,
+                    "fftSamples": 1024,
+                    "graph": false,
+                    "led": false,
+                    "log": false,
+                    "max": 0,
+                    "min": 0,
+                    "title": "control torque",
+                    "units": "Nm",
+                    "value": "%15",
+                    "widget": ""
+                },
+                {
+                    "alarm": 0,
+                    "fft": false,
+                    "fftSamples": 1024,
+                    "graph": false,
+                    "led": false,
+                    "log": false,
+                    "max": 0,
+                    "min": 0,
+                    "title": "net torque",
+                    "units": "Nm",
+                    "value": "%16",
+                    "widget": ""
+                },
+                {
+                    "alarm": 0,
+                    "fft": false,
+                    "fftSamples": 1024,
+                    "graph": true,
+                    "led": false,
+                    "log": false,
+                    "max": 0,
+                    "min": 0,
+                    "title": "filtered current",
+                    "units": "Amps",
+                    "value": "%17",
+                    "widget": ""
                 }
             ],
             "title": "Control Data",

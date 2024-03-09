@@ -23,6 +23,7 @@
 #include "comms.h"
 //control
 #include "PID_v1.h"
+#include "app/control/twid_control.h"
 //filters
 #include "filter/ewma_filter.h"
 
@@ -34,7 +35,7 @@
 /*                               D E F I N E S                                */
 /******************************************************************************/
 
-#define TELEMETRY_QUEUE_SIZE 1000U
+#define TELEMETRY_QUEUE_SIZE 500U
 #define COMMAND_QUEUE_SIZE 10U
 #define UART_BAUD_RATE 500000U
 
@@ -52,7 +53,8 @@
 void TaskReadCommands(void *pvParameters);
 void TaskPublishTelemetry(void *pvParameters);
 void TaskTwiddlerinoControl(void *pvParameters);
-void TaskTestTControl(void *pvParameters);
+void TaskRunTControl(void *pvParameters);
+void TaskUpdateTControlParams(void *pvParameters);
 
 /******************************************************************************/
 /*               P R I V A T E  G L O B A L  V A R I A B L E S                */
@@ -62,6 +64,7 @@ static QueueHandle_t xQueueTelemetry;
 static QueueHandle_t xQueueCommand;
 static TaskHandle_t xTelemTask;
 static TaskHandle_t xCommandTask;
+static TaskHandle_t xTControlTask;
 
 /******************************************************************************/
 /*                P U B L I C  G L O B A L  V A R I A B L E S                 */
@@ -124,11 +127,7 @@ void twiddlerino_setup(startup_type_t startup_type) {
       , 0
     );
     Serial.printf("Command Task Initialized. Task Status: %i\n",eTaskGetState(xCommandTask));
-  }
-
-  //run default controller
-  if (startup_type == startup_type_t::RUN_CONTROLLER_DEFAULT) {
-
+  } else if (startup_type == startup_type_t::RUN_CONTROLLER_DEFAULT) {
     //default config
     test_config_t test_config;
     test_config.Kd = 0;
@@ -150,13 +149,23 @@ void twiddlerino_setup(startup_type_t startup_type) {
       ,  1
     );
     Serial.printf("Control Task Initialized.\nTask Status: %i\n",eTaskGetState(xDefaultControlTask));
-  }
+  } else if (startup_type == startup_type_t::RUN_TCONTROL_DEFAULT) {
 
-  if (startup_type == startup_type_t::RUN_TCONTROL_DEFAULT) {
+    xTaskCreatePinnedToCore(
+      TaskUpdateTControlParams
+      ,  "UpdateTControlParams"
+      ,  8192
+      ,  NULL
+      , configMAX_PRIORITIES
+      , &xCommandTask
+      , 0
+    );
+    Serial.printf("Parameter Update Task Initialized. Waiting for param update commands. Task Status: %i\n",eTaskGetState(xCommandTask));
+
     //start task
     TaskHandle_t xDefaultControlTask;
     xTaskCreatePinnedToCore(
-      TaskTestTControl
+      TaskRunTControl
       ,  "Twiddlerino T Control"
       ,  8192
       ,  NULL
@@ -171,6 +180,66 @@ void twiddlerino_setup(startup_type_t startup_type) {
 /******************************************************************************/
 /*                      P R I V A T E  F U N C T I O N S                      */
 /******************************************************************************/
+
+void TaskPublishTelemetry(void *pvParameters) {
+  if(!Serial) {
+    Serial.begin( UART_BAUD_RATE );
+    Serial.println( "Serial connected on uart0!" );
+  }
+
+  telemetry_t t;
+
+  for(;;) 
+  {
+    if(Serial.availableForWrite() && xQueueReceive(xQueueTelemetry, &t, 20) == pdTRUE){
+      // publish_telemetry(&t);
+      publish_telemetry_serial_studio(&t);
+    }
+    vTaskDelay( 1 );
+  }
+}
+
+void TaskRunTControl(void *pvParameters){
+  INIT_CONTROLLER_CONFIG(control_config);
+  control_config.telem_queue_handle = &xQueueTelemetry;
+
+  //initial hardware state
+  encoder_clear_count();
+
+  tcontrol_configure(&control_config);
+  tcontrol_start();
+  Serial.printf("controller runnning: %i\n",tcontrol_is_running());
+
+  for(;;)
+  {
+    vTaskDelay(0);
+  }
+}
+
+void TaskUpdateTControlParams(void *pvParameters) {
+  if(!Serial) {
+    Serial.begin( UART_BAUD_RATE );//this is on rx0 tx0
+    Serial.println( "Serial connected on uart0!" );
+  }
+
+  String read_string;
+  Serial.printf("Update Control Params Task Started\n");
+  for(;;) 
+  {
+    if( Serial.available()) {
+      read_string = read_string_until('\n');
+      Serial.printf("Received data: %s\n", read_string);
+      if(read_string.substring(0,5).compareTo("STOP") == 0){
+        tcontrol_stop();
+      }else if(read_string.substring(0,8).compareTo("RESET") == 0){
+        tcontrol_reset();
+      }
+    }
+
+    vTaskDelay( 10 );
+  }
+}
+
 
 void TaskReadCommands(void *pvParameters) {
   if(!Serial) {
@@ -253,24 +322,6 @@ void TaskReadCommands(void *pvParameters) {
         task_handle = NULL;
         task_state = eTaskState::eInvalid;
       }
-    }
-    vTaskDelay( 1 );
-  }
-}
-
-void TaskPublishTelemetry(void *pvParameters) {
-  if(!Serial) {
-    Serial.begin( UART_BAUD_RATE );
-    Serial.println( "Serial connected on uart0!" );
-  }
-
-  telemetry_t t;
-
-  for(;;) 
-  {
-    if(Serial.availableForWrite() && xQueueReceive(xQueueTelemetry, &t, 20) == pdTRUE){
-      // publish_telemetry(&t);
-      publish_telemetry_serial_studio(&t);
     }
     vTaskDelay( 1 );
   }
@@ -366,31 +417,3 @@ void TaskTwiddlerinoControl(void *pvParameters){
   //delete the task
   vTaskDelete(NULL);
 }
-
-#include "app/control/twid_control.h"
-void TaskTestTControl(void *pvParameters){
-  INIT_CONTROLLER_CONFIG(control_config);
-  control_config.telem_queue_handle = &xQueueTelemetry;
-  control_config.sample_time_us = 500;
-
-  //initial hardware state
-  encoder_clear_count();
-
-  tcontrol_configure(&control_config);
-  tcontrol_start();
-  Serial.printf("controller runnning: %i\n",tcontrol_is_running());
-
-  for(;;)
-  {
-    vTaskDelay(5);
-  }
-
-  motor_set_pwm(0);
-  motor_set_state(motor_state_t::MOTOR_LOW);
-  encoder_clear_count();
-  Serial.printf("test_complete\n");
-
-  //delete the task
-  vTaskDelete(NULL);
-}
-
