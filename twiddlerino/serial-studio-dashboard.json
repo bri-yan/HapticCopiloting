@@ -1,6 +1,6 @@
 {
-    "frameEnd": "",
-    "frameStart": "",
+    "frameEnd": "*/",
+    "frameStart": "/*",
     "groups": [
         {
             "datasets": [
@@ -239,6 +239,6 @@
             "widget": ""
         }
     ],
-    "separator": "",
+    "separator": ",",
     "title": "TWIDDLERINO_TELEMETRY"
 }

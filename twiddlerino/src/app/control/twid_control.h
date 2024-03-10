@@ -25,13 +25,13 @@
 #define INIT_CONTROLLER_CONFIG(X) controller_config_t X = {\
     .control_type = control_type_t::POSITION_CTRL,\
     .setpoint_type = setpoint_type_t::CONSTANT_SETPOINT_MODE,\
+    .init_setpoint = {.pos = 0.0, .vel = 0.0, .accel = 0.0, .torque = 0.0},\
     .controller_direction = controller_direction_t::NEGATIVE_FEEDBACK,\
     .sample_time_us = 1000,\
     .Kp = 0.5, .Ki = 0.01, .Kd = 0.01, .N = 1.0,\
     .velocity_filter_const = 0.01,\
     .current_filter_const = 0.1,\
-    .torque_Kv = 0.025,\
-    .torque_Ke = 0.011,\
+    .motor_Kv = 0.025, .motor_Ke = 0.011, .motor_J = 1e-6,\
     .impedance = {.K = 1e-3, .B = 0.01, .J = 1e-6},\
     .output_hlim = MOTOR_DUTY_CYCLE_RES, .output_llim = -MOTOR_DUTY_CYCLE_RES\
 }
@@ -81,6 +81,7 @@ typedef struct {
     //config
     control_type_t control_type;
     setpoint_type_t setpoint_type;
+    setpoint_t init_setpoint;
 
     //pid params
     controller_direction_t controller_direction;
@@ -91,8 +92,9 @@ typedef struct {
     double N; //derivative filter coefficient , typically in range of 8 to 20
     double velocity_filter_const; //for velocity ewma filter
     double current_filter_const; //for current ewma filter
-    double torque_Kv; //motor damping constant (empircal)
-    double torque_Ke; //motor torque constant (empircal)
+    double motor_Kv; //motor damping constant (empircal)
+    double motor_Ke; //motor torque constant (empircal)
+    double motor_J; //motor intertia Kgm^2 (empircal)
     virtual_impedance_t impedance;
 
     int32_t output_hlim;
@@ -111,7 +113,6 @@ class DiscretePID {
     DiscretePID(double kp, double ki, double kd, double h);
     DiscretePID(double kp, double ki, double kd, double h, double N);
     DiscretePID(controller_config_t* cfg);
-    ~DiscretePID();
     void reinit();
     void set_all_params(controller_config_t* cfg);
     void set_gains(double kp, double ki, double kd);

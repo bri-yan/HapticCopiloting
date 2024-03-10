@@ -37,7 +37,7 @@
 
 #define TELEMETRY_QUEUE_SIZE 500U
 #define COMMAND_QUEUE_SIZE 10U
-#define UART_BAUD_RATE 500000U
+#define UART_BAUD_RATE 1000000U
 
 /******************************************************************************/
 /*                              T Y P E D E F S                               */
@@ -169,11 +169,10 @@ void twiddlerino_setup(startup_type_t startup_type) {
       ,  "Twiddlerino T Control"
       ,  8192
       ,  NULL
-      ,  configMAX_PRIORITIES
+      ,  configMAX_PRIORITIES - 1
       ,  &xDefaultControlTask
       ,  1
     );
-    Serial.printf("T Control Task Initialized.\nTask Status: %i\n",eTaskGetState(xDefaultControlTask));
   }
 }
 
@@ -202,13 +201,14 @@ void TaskPublishTelemetry(void *pvParameters) {
 void TaskRunTControl(void *pvParameters){
   INIT_CONTROLLER_CONFIG(control_config);
   control_config.telem_queue_handle = &xQueueTelemetry;
+  Serial.printf("T Control Task Initialized.\n");
 
   //initial hardware state
   encoder_clear_count();
 
   tcontrol_configure(&control_config);
   tcontrol_start();
-  Serial.printf("controller runnning: %i\n",tcontrol_is_running());
+  Serial.printf("Controller runnning: %i\n",tcontrol_is_running());
 
   for(;;)
   {
@@ -380,7 +380,7 @@ void TaskTwiddlerinoControl(void *pvParameters){
       read_dt = micros();
       telem.position = encoder_get_angle();
       Position = telem.position;
-      telem.current = -1;//current_sensor_read();
+      telem.current = -1;//current_sensor_get_latest();
       telem.velocity = encoder_get_velocity();
       telem.filtered_velocity = EWMA(telem.velocity);
       telem.current_sps = current_sensor_sps();

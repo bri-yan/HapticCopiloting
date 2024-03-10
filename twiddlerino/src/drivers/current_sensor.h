@@ -20,15 +20,13 @@
 /*                               D E F I N E S                                */
 /******************************************************************************/
 
-#define SHUNT_RESISTOR_OHM 1U
-
 /******************************************************************************/
 /*                             F U N C T I O N S                              */
 /******************************************************************************/
 
 /**
  * @brief Init current sensor (connect to adc over I2C protocol)
- *
+ *        Starts a background task to periodically read external ADC register over i2c.
  */
 void current_sensor_init();
 
@@ -36,13 +34,14 @@ void current_sensor_init();
  * @brief Returns latest current read in amps
  *
  */
-double current_sensor_read();
+double current_sensor_get_latest();
 
 /**
- * @brief Returns latest voltage read in volts
+ * @brief Returns latest current read in amps
+ *        This can be called from an isr
  *
  */
-double current_sensor_read_voltage();
+double current_sensor_get_latest_isr();
 
 /**
  * @brief Returns samples per second rate of sensor ADC

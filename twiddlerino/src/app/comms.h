@@ -11,6 +11,8 @@
 /*                              I N C L U D E S                               */
 /******************************************************************************/
 
+#include "app/control/twid_control.h"
+
 //for int types
 #include <stdint.h>
 
@@ -51,7 +53,7 @@ typedef struct {
     double pwm_duty_cycle;
     uint32_t pwm_frequency; //in Hz
     double current_sps; //current sensor ADC samples/second
-    setpoint_t target;
+    // setpoint_t latest_setpoint;
 
     //other
     bool pid_success_flag;

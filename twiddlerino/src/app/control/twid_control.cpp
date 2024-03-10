@@ -46,7 +46,7 @@ static portMUX_TYPE spinlock = portMUX_INITIALIZER_UNLOCKED;
 
 //controller information to be passed to callback function
 INIT_CONTROLLER_CONFIG(controller_config);
-static setpoint_t trajectory_point = {.pos = 0.0, .vel =0.0, .accel = 0.0, .torque = 0.0};
+static setpoint_t setpoint = {.pos = 0.0, .vel =0.0, .accel = 0.0, .torque = 0.0};
 static uint32_t last_time = 0.0;
 static uint32_t start_time = 0.0;
 static telemetry_t telem;
@@ -68,12 +68,13 @@ void tcontrol_configure(controller_config_t* config) {
     }
 
     controller_config = *config;
-    trajectory_point = {.pos = 0.0, .vel =0.0, .accel = 0.0};
+    setpoint = {.pos = 0.0, .vel =0.0, .accel = 0.0};
     last_time = 0.0;
     start_time = 0.0;
     velocity_filt_ewa = EwmaFilter(controller_config.velocity_filter_const, 0.0);
     current_filt_ewa = EwmaFilter(controller_config.current_filter_const, 0.0);
     pid_controller = DiscretePID(&controller_config);
+    telem.current_sps = current_sensor_sps();
 
     tcontrol_update_tunings(&controller_config);
 
@@ -125,7 +126,7 @@ bool tcontrol_is_running(){
 
 void tcontrol_update_trajectory(setpoint_t* tp) {
     _ENTER_CRITICAL();
-    trajectory_point = *tp;
+    setpoint = *tp;
     _EXIT_CRITICAL();
 }
 
@@ -148,7 +149,7 @@ void tcontrol_update_tunings(controller_config_t* config) {
 
 static void pid_callback(void *args)
 {
-    telem.target = trajectory_point;
+    // telem.latest_setpoint = setpoint;
 
     //sensor read segment 
 
@@ -158,17 +159,16 @@ static void pid_callback(void *args)
     telem.position = encoder_get_angle();
 
     //read and filter current
-    telem.current = -1;//current_sensor_read();
+    telem.current = current_sensor_get_latest_isr();
     telem.filtered_current = current_filt_ewa(telem.current);
-    telem.current_sps = -1;//current_sensor_sps();
 
     //read and filter velocity
     telem.velocity = encoder_get_velocity();
     telem.filtered_velocity = velocity_filt_ewa(telem.velocity);
 
     //calculate torque
-    telem.torque_net = controller_config.torque_Ke * telem.filtered_current;
-    telem.torque_control = controller_config.torque_Kv * telem.filtered_velocity;
+    telem.torque_net = controller_config.motor_Ke * telem.filtered_current;
+    telem.torque_control = controller_config.motor_Kv * telem.filtered_velocity;
     telem.torque_external = telem.torque_net - telem.torque_control;
 
     telem.read_dt = micros() - telem.read_dt;
@@ -180,25 +180,36 @@ static void pid_callback(void *args)
     auto output_signal = 0.0;
     auto setpoint_signal = 0.0;
 
+    //ratio between real (empircal) and desired inertia
+    auto jjv = controller_config.motor_J / controller_config.impedance.J;
+
     //controller mode, select signal
     switch(controller_config.control_type) {
         case control_type_t::POSITION_CTRL:
             feedback_signal = telem.position;
-            setpoint_signal = trajectory_point.pos;
+            setpoint_signal = setpoint.pos;
             break;
         case control_type_t::VELOCITY_CTRL:
             feedback_signal = telem.filtered_velocity;
-            setpoint_signal = trajectory_point.vel;
+            setpoint_signal = setpoint.vel;
             break;
         case control_type_t::TORQUE_CTRL:
             //we are controlling the net torque through current control
             feedback_signal = telem.filtered_current;
-            setpoint_signal = trajectory_point.torque / controller_config.torque_Ke;;
+            setpoint_signal = setpoint.torque / controller_config.motor_Ke;;
             break;
         case control_type_t::IMPEDANCE_CTRL:
-            //TODO apply impedance law
-            setpoint_signal = 0;//torque
-            feedback_signal = 0;
+            //apply impedance law, the setpoint signal is a torque
+            setpoint_signal = (controller_config.motor_J * setpoint.accel) + 
+                (telem.torque_external * (1- jjv)) + 
+                (controller_config.motor_Kv * telem.filtered_velocity) + 
+                ((jjv * controller_config.impedance.K) * (setpoint.pos - telem.position)) +
+                ((jjv * controller_config.impedance.B) * (setpoint.vel - telem.filtered_velocity));
+            //convert torque to current for current control
+            setpoint_signal/=controller_config.motor_Ke;
+            
+            //feeback signal is current
+            feedback_signal = telem.current;
             break;
         case control_type_t::ADMITTANCE_CTRL:
             feedback_signal = 0;
@@ -206,7 +217,7 @@ static void pid_callback(void *args)
             break;
         default:
             feedback_signal = telem.position;
-            setpoint_signal = trajectory_point.pos;
+            setpoint_signal = setpoint.pos;
             break;
     }
 
@@ -223,7 +234,7 @@ static void pid_callback(void *args)
     telem.timestamp_ms = (micros() - start_time)/1000.0;
 
     if(controller_config.telem_queue_handle != NULL) {
-        BaseType_t xHigherPriorityTaskWoken = pdTRUE;
+        BaseType_t xHigherPriorityTaskWoken = pdFALSE;
         xQueueSendFromISR(*controller_config.telem_queue_handle, &telem, &xHigherPriorityTaskWoken);
     }
 }
