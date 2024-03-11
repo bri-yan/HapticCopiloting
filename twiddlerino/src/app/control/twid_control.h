@@ -13,7 +13,6 @@
 /******************************************************************************/
 
 #include "Arduino.h"
-#include "app/comms.h"
 #include "drivers/motor.h"
 
 /******************************************************************************/
@@ -53,7 +52,6 @@ typedef enum {
     TRAJECTORY_MODE,
     NO_TRAJECTORY_MODE
 } setpoint_type_t;
-
 
 typedef enum {
     POSITIVE_FEEDBACK,

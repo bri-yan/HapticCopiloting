@@ -40,7 +40,7 @@ typedef struct {
     uint32_t control_dt;
 
     //control variables
-    double set_point;
+    setpoint_t setpoint;
     double error;
     double position; //position in deg
     double velocity; //velocity in deg/s
@@ -53,7 +53,12 @@ typedef struct {
     double pwm_duty_cycle;
     uint32_t pwm_frequency; //in Hz
     double current_sps; //current sensor ADC samples/second
-    // setpoint_t latest_setpoint;
+
+    //controller params
+    double Kp;
+    double Ki;
+    double Kd;
+    virtual_impedance_t impedance;
 
     //other
     bool pid_success_flag;

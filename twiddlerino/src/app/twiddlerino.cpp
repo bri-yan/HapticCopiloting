@@ -37,7 +37,7 @@
 
 #define TELEMETRY_QUEUE_SIZE 500U
 #define COMMAND_QUEUE_SIZE 10U
-#define UART_BAUD_RATE 1000000U
+#define UART_BAUD_RATE 500000U
 
 /******************************************************************************/
 /*                              T Y P E D E F S                               */
@@ -394,7 +394,7 @@ void TaskTwiddlerinoControl(void *pvParameters){
       control_dt = micros() - control_dt;
 
       //fill and return telemetry structure
-      telem.set_point = Setpoint;
+      telem.setpoint.pos = Setpoint;
       telem.timestamp_ms = (micros() - start_time)/1000.0;
       last_time+=dt;
       telem.loop_dt = dt;

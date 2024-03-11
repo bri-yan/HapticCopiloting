@@ -17,6 +17,8 @@
 #include "drivers/motor.h"
 #include "drivers/current_sensor.h"
 
+#include "app/comms.h"
+
 //filters
 #include "app/filter/ewma_filter.h"
 
@@ -149,10 +151,9 @@ void tcontrol_update_tunings(controller_config_t* config) {
 
 static void pid_callback(void *args)
 {
-    // telem.latest_setpoint = setpoint;
+    telem.timestamp_ms = (micros() - start_time)/1000.0;
 
     //sensor read segment 
-
     telem.loop_dt = micros() - last_time;
     last_time += telem.loop_dt;
     telem.read_dt = micros();
@@ -230,8 +231,11 @@ static void pid_callback(void *args)
     telem.control_dt = micros() - telem.control_dt;
 
     //fill and return telemetry structure
-    telem.set_point = setpoint_signal;
-    telem.timestamp_ms = (micros() - start_time)/1000.0;
+    telem.setpoint = setpoint;
+    telem.Kp = controller_config.Kp;
+    telem.Ki = controller_config.Ki;
+    telem.Ki = controller_config.Kd;
+    telem.impedance = controller_config.impedance;
 
     if(controller_config.telem_queue_handle != NULL) {
         BaseType_t xHigherPriorityTaskWoken = pdFALSE;

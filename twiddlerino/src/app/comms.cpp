@@ -111,7 +111,7 @@ uint32_t publish_telemetry(telemetry_t *telem) {
     telemetry_t t = *telem;
     if(Serial) {
         size = Serial.printf("telem,time_ms:%lu,loop_dt:%lu,control_dt:%lu,read_dt:%lu,pid_success_flag:%i,position:%lf,pwm_duty_cycle:%lf,set_point:%f,velocity:%lf,current:%lf,torque_external:%lf,\n", 
-            t.timestamp_ms, t.loop_dt, t.control_dt, t.read_dt, t.pid_success_flag, t.position, t.pwm_duty_cycle, t.set_point, t.velocity, t.current, t.torque_external);
+            t.timestamp_ms, t.loop_dt, t.control_dt, t.read_dt, t.pid_success_flag, t.position, t.pwm_duty_cycle, t.setpoint.pos, t.velocity, t.current, t.torque_external);
     }
     return size;
 }
@@ -124,11 +124,12 @@ uint32_t publish_telemetry_serial_studio(telemetry_t *telem) {
     uint32_t size = 0;
     telemetry_t t = *telem;
     if(Serial) {
-
-        size = Serial.printf("/*TWIDDLERINO_TELEMETRY,%lu,%lu,%lu,%lu,%i,%lf,%lf,%lu,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf*/\n", 
-            t.timestamp_ms, t.loop_dt, t.control_dt, t.read_dt, t.pid_success_flag, t.position, t.pwm_duty_cycle, 
-            t.pwm_frequency, t.set_point, t.velocity, t.filtered_velocity, t.current, t.torque_external, t.torque_control,
-            t.torque_net, t.filtered_current);
+        size = Serial.printf("/*TWIDDLERINO_TELEMETRY,%lu,%lu,%lu,%lu,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf*/\n\n", 
+            t.timestamp_ms, t.loop_dt, t.control_dt, t.read_dt, 
+            t.pwm_duty_cycle, t.pwm_frequency, 
+            t.position, t.velocity, t.filtered_velocity, t.current, t.filtered_current, t.torque_external, t.torque_control, t.torque_net,
+            t.setpoint.pos, t.setpoint.vel, t.setpoint.accel, t.setpoint.torque,
+            t.Kp, t.Ki, t.Kd, t.impedance.K, t.impedance.B, t.impedance.J);
     }
     return size;
 }
