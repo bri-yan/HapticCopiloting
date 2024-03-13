@@ -64,7 +64,7 @@ esp_timer_handle_t pid_timer;
 /*                       P U B L I C  F U N C T I O N S                       */
 /******************************************************************************/
 
-void tcontrol_configure(controller_config_t* config) {
+void tcontrol_cfg(controller_config_t* config) {
     if(tcontrol_is_running()){
         tcontrol_stop();
     }
@@ -77,8 +77,6 @@ void tcontrol_configure(controller_config_t* config) {
     current_filt_ewa = EwmaFilter(controller_config.current_filter_const, 0.0);
     pid_controller = DiscretePID(&controller_config);
     telem.current_sps = current_sensor_sps();
-
-    tcontrol_update_tunings(&controller_config);
 
     const esp_timer_create_args_t timer_args = {
         .callback = pid_callback,
@@ -118,7 +116,7 @@ void tcontrol_reset(){
     INIT_CONTROLLER_CONFIG(def);
     def.telem_queue_handle = controller_config.telem_queue_handle;
     controller_config = def;
-    tcontrol_configure(&controller_config);
+    tcontrol_cfg(&controller_config);
     tcontrol_start();
 }
 
@@ -126,22 +124,27 @@ bool tcontrol_is_running(){
     return esp_timer_is_active(pid_timer);
 }
 
-void tcontrol_update_trajectory(setpoint_t* tp) {
+void tcontrol_get_cfg(controller_config_t* cfg_out) {
+    _ENTER_CRITICAL();
+    *cfg_out = controller_config;
+    _EXIT_CRITICAL();
+}
+
+void tcontrol_update_setpoint(setpoint_t* tp) {
     _ENTER_CRITICAL();
     setpoint = *tp;
     _EXIT_CRITICAL();
 }
 
-void tcontrol_update_tunings(double kp, double ki, double kd, controller_direction_t direction) {
-    _ENTER_CRITICAL(); 
-    pid_controller.set_gains(kp, ki, kd);
-    pid_controller.set_direction(direction);
-    _EXIT_CRITICAL();
-}
-
-void tcontrol_update_tunings(controller_config_t* config) {
-    _ENTER_CRITICAL(); 
-    pid_controller.set_all_params(config);
+void tcontrol_update_cfg(controller_config_t* cfg) {
+    _ENTER_CRITICAL();
+    controller_config.Kp = cfg->Kp;
+    controller_config.Ki = cfg->Ki;
+    controller_config.Kd = cfg->Kd;
+    controller_config.impedance.K = cfg->impedance.K;
+    controller_config.impedance.J = cfg->impedance.J;
+    controller_config.impedance.B = cfg->impedance.B;
+    controller_config.control_type = cfg->control_type;
     _EXIT_CRITICAL();
 }
 

@@ -44,12 +44,10 @@ char timed_read();
 /******************************************************************************/
 
 //initializes Twiddlerino
-cmd_type_t decode_cmd(String * read_string, test_config_t *t) {
-    uint16_t i = 0;
-    uint16_t i0 = 0;
+cmd_type_t decode_test_cmd(String * read_string, test_config_t *t) {
+    int32_t i = 0;
+    int32_t i0 = 0;
     t->cmd_type = cmd_type_t::NA_CMD;
-
-    char buffer[200];
 
     //'config_test,P:{params.P},I:{params.I},D:{params.D},set_point:{params.SetPoint}'
     if(read_string->substring(0,11).compareTo("config_test") == 0){
@@ -103,6 +101,37 @@ cmd_type_t decode_cmd(String * read_string, test_config_t *t) {
     }
 
     return t->cmd_type;
+}
+
+
+bool decode_config_cmd(String *str, controller_config_t *cfg) {
+    if(str->substring(0,7).compareTo("set_pid") == 0){
+        double vals[3] = {0.0,0.0,0.0};
+        extract_doubles(str, vals, 3);
+        cfg->Kp = vals[0];
+        cfg->Ki = vals[1];
+        cfg->Kd = vals[2];
+        return true;
+    } else if(str->substring(0,14).compareTo("set_impedance") == 0) {
+        double vals[3] = {0.0,0.0,0.0};
+        extract_doubles(str, vals, 3);
+        cfg->impedance.K = vals[0];
+        cfg->impedance.B = vals[1];
+        cfg->impedance.J = vals[2];
+        return true;
+    } else if(str->substring(0,8).compareTo("set_mode") == 0) {
+        double val = 0.0;
+        extract_doubles(str, &val, 1);
+        int32_t mode = (int32_t) val;
+        if (mode > control_type_t::ADMITTANCE_CTRL || mode < control_type_t::POSITION_CTRL) {
+            return false;
+        } else {
+            cfg->control_type = (control_type_t) mode;
+            return true;
+        }
+    }
+
+    return false;
 
 }
 
@@ -134,6 +163,19 @@ uint32_t publish_telemetry_serial_studio(telemetry_t *telem) {
     return size;
 }
 
+uint32_t print_controller_cfg() {
+    uint32_t size = 0;
+
+    if(Serial) {
+        controller_config_t cfg;
+        tcontrol_get_cfg(&cfg);
+        size = Serial.printf("################\nCONTROLLER CONFIGURATION:\n*control_type:%i\n*Kp:%lf\n*Ki:%lf\n*Kd:%lf\n*stiffness:%lf\n*damping:%lf\n*intertia:%lf\n################\n",
+        cfg.control_type, cfg.Kp, cfg.Ki, cfg.Kd, cfg.impedance.K, cfg.impedance.B, cfg.impedance.J);
+    }
+
+    return size;
+}
+
 String read_string_until(char terminator) {
     String ret;
     int c = timed_read();
@@ -142,6 +184,20 @@ String read_string_until(char terminator) {
         c = timed_read();
     }
     return ret;
+}
+
+void extract_doubles(String * str, double* out, uint16_t num_values) {
+    int32_t i = 0, i0 = 0;
+    for(int j = 0; j < num_values; j++) {
+        i0 = str->indexOf(",",i0);
+        i0++;
+        i = str->indexOf(",",i0);
+        if (i < 0) {
+            i = str->length() - 1;
+        }
+        out[j] = str->substring(i0,i).toDouble();
+        i++;
+    }
 }
 
 /******************************************************************************/
@@ -159,12 +215,3 @@ char timed_read(){
     } while(micros() - start < READ_TIMEOUT_US);
     return -1;     // -1 indicates timeout
 }
-
-// uint32_t publish_telemetry_raw(telemetry_t *telem){
-//     telemetry_packet_t packet;
-//     packet.telemetry_struct = *telem;
-//     Serial.print("telem");
-//     uint32_t size = Serial.write(packet.buffer, strlen(packet.buffer));
-//     Serial.print("\n");
-//     return size;
-// }

@@ -106,8 +106,9 @@ typedef union {
 /*                             F U N C T I O N S                              */
 /******************************************************************************/
 
-//initializes Twiddlerino
-cmd_type_t decode_cmd(String *, test_config_t *);
+cmd_type_t decode_test_cmd(String *, test_config_t *);
+
+bool decode_config_cmd(String *, controller_config_t *);
 
 /**
  * @brief Publish comma seperated telemetry string (utf-8) over serial
@@ -121,12 +122,15 @@ uint32_t publish_telemetry(telemetry_t *);
  */
 uint32_t publish_telemetry_serial_studio(telemetry_t *telem);
 
-// /**
-//  * @brief Publish raw bytes over serials (saves space)
-//  * 
-//  */
-// uint32_t publish_telemetry_raw(telemetry_t *);
+/**
+ * @brief Print controller config over serial port (if it is open)
+ * 
+ */
+uint32_t print_controller_cfg();
 
 String read_string_until(char terminator);
+
+//extract doubles from string
+void extract_doubles(String *, double*, uint16_t);
 
 #endif //COMMS_H

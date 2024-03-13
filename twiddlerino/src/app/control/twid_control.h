@@ -140,20 +140,30 @@ class DiscretePID {
 /*                             F U N C T I O N S                              */
 /******************************************************************************/
 
-void tcontrol_configure(controller_config_t*);
+//configure controller and timer isr
+//this function must be run before tcontrol_start or an error will be thrown
+void tcontrol_cfg(controller_config_t*);
 
+//starts control timer isr
 void tcontrol_start();
 
+//stops control timer isr
 void tcontrol_stop();
 
+//resets to default config and restarts control timer isr
 void tcontrol_reset();
 
+//returns true if the pid timer isr is active
 bool tcontrol_is_running();
 
-void tcontrol_update_trajectory(setpoint_t*);
+//copies config to destination
+void tcontrol_get_cfg(controller_config_t*);
 
-void tcontrol_update_tunings(double kp, double ki, double kd, controller_direction_t dir);
+//set a new setpoint target
+void tcontrol_update_setpoint(setpoint_t*);
 
-void tcontrol_update_tunings(controller_config_t* config);
+//update existing configuration
+//NOTE!!! this will only update gains for pid, impedance, and control mode for now
+void tcontrol_update_cfg(controller_config_t*);
 
 #endif //TWID_CONTROL_H_
