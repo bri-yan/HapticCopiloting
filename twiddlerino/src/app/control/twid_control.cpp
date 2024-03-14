@@ -64,7 +64,7 @@ static DiscretePID pid_controller(&controller_config);
 
 //pid timer handle
 //https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/system/esp_timer.html
-esp_timer_handle_t pid_timer;
+static esp_timer_handle_t pid_timer;
 
 /******************************************************************************/
 /*                       P U B L I C  F U N C T I O N S                       */
@@ -97,7 +97,8 @@ void tcontrol_cfg(controller_config_t* config) {
     }
 
     if(Serial.availableForWrite()){
-        Serial.printf("Controller config complete\n");
+        Serial.printf("Controller config complete.\n");
+        print_controller_cfg();
     }
 }
 
@@ -107,15 +108,17 @@ void tcontrol_start(){
         start_time = micros();
         ESP_ERROR_CHECK(esp_timer_start_periodic(pid_timer, controller_config.sample_time_us));
         if(Serial.availableForWrite()){
-            Serial.printf("Controller timer started\n");
+            Serial.printf("Controller timer started.\n");
         }
     }
 }
 
 void tcontrol_stop(){
-    ESP_ERROR_CHECK(esp_timer_stop(pid_timer));
-    if(Serial.availableForWrite()){
-        Serial.printf("Controller timer stopped.\n");
+    if(esp_timer_is_active(pid_timer)) {
+        ESP_ERROR_CHECK(esp_timer_stop(pid_timer));
+        if(Serial.availableForWrite()){
+            Serial.printf("Controller timer stopped.\n");
+        }
     }
 }
 
@@ -294,7 +297,7 @@ DiscretePID::DiscretePID(controller_config_t* cfg) {
     reinit();
 }
 
-void DiscretePID::reinit(){
+void DiscretePID::reinit() {
     last_measured = 0.0;
     last_setpoint = 0.0;
     last_output = 0.0;

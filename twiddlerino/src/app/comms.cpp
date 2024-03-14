@@ -33,7 +33,7 @@
 /*            P R I V A T E  F U N C T I O N  P R O T O T Y P E S             */
 /******************************************************************************/
 
-char timed_read();
+static char timed_read();
 
 /******************************************************************************/
 /*               P R I V A T E  G L O B A L  V A R I A B L E S                */
@@ -122,15 +122,28 @@ bool decode_config_cmd(String *str, controller_config_t *cfg) {
         cfg->impedance.J = vals[2];
         return true;
     } else if(str->substring(0,8).compareTo("set_mode") == 0) {
-        double val = 0.0;
-        extract_doubles(str, &val, 1);
-        int32_t mode = (int32_t) val;
-        if (mode > control_type_t::ADMITTANCE_CTRL || mode < control_type_t::POSITION_CTRL) {
-            return false;
+        int16_t i0 = str->indexOf(',',0);
+        i0+=1;
+        int16_t i = str->indexOf(',',i0);
+        auto name = str->substring(i0,i);
+
+        control_type_t mode = cfg->control_type;
+        if(name == "position"){
+            mode = control_type_t::POSITION_CTRL;
+        } else if(name=="velocity") {
+            mode = control_type_t::VELOCITY_CTRL;
+        } else if(name=="torque") {
+            mode = control_type_t::TORQUE_CTRL;
+        } else if(name=="impedance") {
+            mode = control_type_t::IMPEDANCE_CTRL;
+        } else if(name=="admittance") {
+            mode = control_type_t::ADMITTANCE_CTRL;
         } else {
-            cfg->control_type = (control_type_t) mode;
-            return true;
+            return false;
         }
+
+        cfg->control_type = mode;
+        return true;
     }
 
     return false;
@@ -171,8 +184,8 @@ uint32_t print_controller_cfg() {
     if(Serial) {
         controller_config_t cfg;
         tcontrol_get_cfg(&cfg);
-        size = Serial.printf("################\nCONTROLLER CONFIGURATION:\n*control_type:%i\n*Kp:%lf\n*Ki:%lf\n*Kd:%lf\n*stiffness:%lf\n*damping:%lf\n*intertia:%lf\n################\n",
-        cfg.control_type, cfg.Kp, cfg.Ki, cfg.Kd, cfg.impedance.K, cfg.impedance.B, cfg.impedance.J);
+        size = Serial.printf("################\nCONTROLLER CONFIGURATION:\n*control_type:%i\t*sample_time:%lu us\n*Kp:%lf\t*Ki:%lf\t*Kd:%lf\n*stiffness:%lf\t*damping:%lf\t*intertia:%lf\n################\n",
+        cfg.control_type, cfg.sample_time_us, cfg.Kp, cfg.Ki, cfg.Kd, cfg.impedance.K, cfg.impedance.B, cfg.impedance.J);
     }
 
     return size;
@@ -206,7 +219,7 @@ void extract_doubles(String * str, double* out, uint16_t num_values) {
 /*                      P R I V A T E  F U N C T I O N S                      */
 /******************************************************************************/
 
-char timed_read(){
+static char timed_read(){
     char c;
     uint32_t start = micros();
     do {

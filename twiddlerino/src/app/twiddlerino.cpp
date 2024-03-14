@@ -228,27 +228,31 @@ void TaskUpdateTControlParams(void *pvParameters) {
     if( Serial.available()) {
       read_string = read_string_until('\n');
       Serial.printf("Received data: %s\n", read_string);
-      if(read_string.substring(0,5).compareTo("STOP") == 0){
+      if(read_string == "STOP" || read_string == "stop"){
         tcontrol_stop();
-      }else if(read_string.substring(0,8).compareTo("RESET") == 0){
+      } else if(read_string == "RESET" || read_string == "reset"){
         tcontrol_reset();
       } else if(read_string.substring(0,12).compareTo("set_setpoint") == 0){
         double vals[4] = {0.0, 0.0, 0.0, 0.0};
         extract_doubles(&read_string, vals, 4);
+  
         setpoint_t sp;
         sp.pos = vals[0];
         sp.vel = vals[1];
         sp.accel = vals[2];
         sp.torque = vals[3];
+
         tcontrol_update_setpoint(&sp);
         Serial.printf("Setpoint updated.\n");
       } else {
         controller_config_t cfg;
         tcontrol_get_cfg(&cfg);
+
         if(decode_config_cmd(&read_string, &cfg)){
           tcontrol_update_cfg(&cfg);
           Serial.printf("Controller config updated.\n");
         }
+
         print_controller_cfg();
       }
     }
