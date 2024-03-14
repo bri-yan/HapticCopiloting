@@ -232,7 +232,7 @@ void TaskUpdateTControlParams(void *pvParameters) {
         tcontrol_stop();
       } else if(read_string == "RESET" || read_string == "reset"){
         tcontrol_reset();
-      } else if(read_string.substring(0,12).compareTo("set_setpoint") == 0){
+      } else if(read_string.substring(0,12) == "set_setpoint"){
         double vals[4] = {0.0, 0.0, 0.0, 0.0};
         extract_doubles(&read_string, vals, 4);
   
@@ -244,6 +244,14 @@ void TaskUpdateTControlParams(void *pvParameters) {
 
         tcontrol_update_setpoint(&sp);
         Serial.printf("Setpoint updated.\n");
+      } else if(read_string.substring(0,13) == "set_dutycycle") {
+          int16_t i0 = read_string.indexOf(',',0);
+          i0+=1;
+          int16_t i = read_string.indexOf(',',i0);
+          int32_t dc = read_string.substring(i0,i).toInt();
+          motor_set_pwm(dc);
+          Serial.printf("Set pwm duty cycle to %li with frequency %lu.\nMotor State: %i.\n",
+          motor_get_duty_cycle(), motor_get_frequency(), motor_get_state());
       } else {
         controller_config_t cfg;
         tcontrol_get_cfg(&cfg);

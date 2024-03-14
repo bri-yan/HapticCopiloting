@@ -232,8 +232,8 @@ static void pid_callback(void *args)
             setpoint_signal = 0;
             break;
         default:
-            feedback_signal = telem.position;
-            setpoint_signal = setpoint.pos;
+            feedback_signal = 0;
+            setpoint_signal = 0;
             break;
     }
 
@@ -241,7 +241,11 @@ static void pid_callback(void *args)
     telem.error = pid_controller.get_error();
 
     //apply control signal
-    telem.pwm_duty_cycle = motor_set_pwm(output_signal);
+    if(controller_config.control_type != control_type_t::NO_CTRL) {
+        telem.pwm_duty_cycle = motor_set_pwm(output_signal);
+    } else {
+        telem.pwm_duty_cycle = (double)motor_get_duty_cycle();
+    }
     telem.pwm_frequency = motor_get_frequency();
     telem.control_dt = micros() - telem.control_dt;
 

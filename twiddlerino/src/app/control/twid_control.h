@@ -24,11 +24,12 @@
 /******************************************************************************/
 
 typedef enum {
-    POSITION_CTRL,
-    VELOCITY_CTRL,
-    TORQUE_CTRL,
-    IMPEDANCE_CTRL,
-    ADMITTANCE_CTRL
+    POSITION_CTRL,      //position pid control
+    VELOCITY_CTRL,      //velocity pid control
+    TORQUE_CTRL,        //torque pid control
+    IMPEDANCE_CTRL,     //cascaded impedance control with torque pid control inner loop
+    ADMITTANCE_CTRL,    //cascaded admittance control with position pid control inner loop
+    NO_CTRL             //no control, telemetry only
 } control_type_t;
 
 typedef enum {

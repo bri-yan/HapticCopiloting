@@ -138,6 +138,8 @@ bool decode_config_cmd(String *str, controller_config_t *cfg) {
             mode = control_type_t::IMPEDANCE_CTRL;
         } else if(name=="admittance") {
             mode = control_type_t::ADMITTANCE_CTRL;
+        } else if(name=="no_control") {
+            mode = control_type_t::NO_CTRL;
         } else {
             return false;
         }
