@@ -44,6 +44,9 @@
 
 static void pid_callback(void *args);
 
+//stop motor and abort if speed is too high
+static void motor_safety_check(double speed);
+
 /******************************************************************************/
 /*               P R I V A T E  G L O B A L  V A R I A B L E S                */
 /******************************************************************************/
@@ -180,6 +183,9 @@ static void pid_callback(void *args)
 
     //read and filter velocity
     telem.velocity = encoder_get_velocity();
+
+    motor_safety_check(telem.velocity);
+
     telem.filtered_velocity = velocity_filt_ewa(telem.velocity);
 
     //calculate torque
@@ -266,11 +272,18 @@ static void pid_callback(void *args)
     telem_dt = micros() - telem_dt;
 }
 
+static void motor_safety_check(double speed) {
+    if(speed > MOTOR_MAX_SPEED_DEGS || speed < -MOTOR_MAX_SPEED_DEGS) {
+        motor_set_pwm(0);
+        motor_set_state(motor_state_t::MOTOR_LOW);
+        Serial.printf("Motor speed is too fast! %lf deg/s", speed);
+        esp_system_abort("Aborting! Motor speed is too fast!");
+    }
+}
 
 /******************************************************************************/
 /*                                 C L A S S                                  */
 /******************************************************************************/
-
 
 DiscretePID::DiscretePID(double kp, double ki, double kd, double h) {
     this->N = 1.0;
