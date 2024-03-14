@@ -14,6 +14,9 @@
 //twiddler pin definitions
 #include "app/twid32_pin_defs.h"
 
+//CONFIG 
+#include "app/twid32_config.h"
+
 //drivers
 #include "drivers/encoder.h"
 #include "drivers/motor.h"
@@ -34,10 +37,6 @@
 /******************************************************************************/
 /*                               D E F I N E S                                */
 /******************************************************************************/
-
-#define TELEMETRY_QUEUE_SIZE 500U
-#define COMMAND_QUEUE_SIZE 10U
-#define UART_BAUD_RATE 500000U
 
 /******************************************************************************/
 /*                              T Y P E D E F S                               */
@@ -212,7 +211,7 @@ void TaskRunTControl(void *pvParameters){
 
   for(;;)
   {
-    vTaskDelay(0);
+    vTaskDelay(1);
   }
 }
 

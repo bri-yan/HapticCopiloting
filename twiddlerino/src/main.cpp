@@ -1,12 +1,5 @@
 
 #include "app/twiddlerino.h"
-#include "Arduino.h"
-
-//twiddler pin definitions
-#include "app/twid32_pin_defs.h"
-
-//drivers
-#include "drivers/encoder.h"
 
 void setup() {
   //everything is setup here

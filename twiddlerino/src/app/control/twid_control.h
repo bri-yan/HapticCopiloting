@@ -13,27 +13,11 @@
 /******************************************************************************/
 
 #include "Arduino.h"
-#include "drivers/motor.h"
+#include "app/twid32_config.h"
 
 /******************************************************************************/
 /*                               D E F I N E S                                */
 /******************************************************************************/
-
-//macro for struct (partial) init to fill out default controller parameters
-//CHANGE CONTROLLER DEFAULT CONFIG HERE!!!!
-#define INIT_CONTROLLER_CONFIG(X) controller_config_t X = {\
-    .control_type = control_type_t::POSITION_CTRL,\
-    .setpoint_type = setpoint_type_t::CONSTANT_SETPOINT_MODE,\
-    .init_setpoint = {.pos = 0.0, .vel = 0.0, .accel = 0.0, .torque = 0.0},\
-    .controller_direction = controller_direction_t::NEGATIVE_FEEDBACK,\
-    .sample_time_us = 1000,\
-    .Kp = 0.5, .Ki = 0.01, .Kd = 0.01, .N = 1.0,\
-    .velocity_filter_const = 0.01,\
-    .current_filter_const = 0.1,\
-    .motor_Kv = 0.025, .motor_Ke = 0.011, .motor_J = 1e-6,\
-    .impedance = {.K = 1e-3, .B = 0.01, .J = 1e-6},\
-    .output_hlim = MOTOR_DUTY_CYCLE_RES, .output_llim = -MOTOR_DUTY_CYCLE_RES\
-}
 
 /******************************************************************************/
 /*                              T Y P E D E F S                               */
@@ -124,8 +108,8 @@ class DiscretePID {
 
   private:
     controller_direction_t direction = controller_direction_t::NEGATIVE_FEEDBACK;
-    int32_t OUTPUT_MAX = MOTOR_DUTY_CYCLE_RES;
-    int32_t OUTPUT_MIN = -MOTOR_DUTY_CYCLE_RES;
+    int32_t OUTPUT_MAX = 1024;
+    int32_t OUTPUT_MIN = -1024;
     double Kp = 0.0, Ki = 0.0, Kd = 0.0; //pid params
     double h; //controller discrete step time in seconds
     double N; //derivative filter constant

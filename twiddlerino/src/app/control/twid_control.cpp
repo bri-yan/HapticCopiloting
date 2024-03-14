@@ -12,11 +12,15 @@
 //header for this file
 #include "app/control/twid_control.h"
 
+//config
+#include "app/twid32_config.h"
+
 //hardware drivers
 #include "drivers/encoder.h"
 #include "drivers/motor.h"
 #include "drivers/current_sensor.h"
 
+//communication
 #include "app/comms.h"
 
 //filters
@@ -49,8 +53,10 @@ static portMUX_TYPE spinlock = portMUX_INITIALIZER_UNLOCKED;
 //controller information to be passed to callback function
 INIT_CONTROLLER_CONFIG(controller_config);
 static setpoint_t setpoint = {.pos = 0.0, .vel =0.0, .accel = 0.0, .torque = 0.0};
-static uint32_t last_time = 0.0;
-static uint32_t start_time = 0.0;
+static uint32_t last_time = 0; //last loop timestamp us
+static uint32_t start_time = 0; //start timestamp us
+static uint32_t telem_dt = 0; //telemetry code delta time in us
+static uint32_t itr = 0; //loop iterations
 static telemetry_t telem;
 static EwmaFilter velocity_filt_ewa(controller_config.velocity_filter_const, 0.0);
 static EwmaFilter current_filt_ewa(controller_config.current_filter_const, 0.0);
@@ -71,8 +77,10 @@ void tcontrol_cfg(controller_config_t* config) {
 
     controller_config = *config;
     setpoint = {.pos = 0.0, .vel =0.0, .accel = 0.0};
-    last_time = 0.0;
-    start_time = 0.0;
+    last_time = 0;
+    start_time = 0;
+    telem_dt = 0;
+    itr = 0;
     velocity_filt_ewa = EwmaFilter(controller_config.velocity_filter_const, 0.0);
     current_filt_ewa = EwmaFilter(controller_config.current_filter_const, 0.0);
     pid_controller = DiscretePID(&controller_config);
@@ -145,6 +153,7 @@ void tcontrol_update_cfg(controller_config_t* cfg) {
     controller_config.impedance.J = cfg->impedance.J;
     controller_config.impedance.B = cfg->impedance.B;
     controller_config.control_type = cfg->control_type;
+    pid_controller.set_all_params(&controller_config);
     _EXIT_CRITICAL();
 }
 
@@ -154,11 +163,11 @@ void tcontrol_update_cfg(controller_config_t* cfg) {
 
 static void pid_callback(void *args)
 {
-    telem.timestamp_ms = (micros() - start_time)/1000.0;
-
     //sensor read segment 
+    telem.timestamp_ms = (micros() - start_time)/1000.0;
     telem.loop_dt = micros() - last_time;
     last_time += telem.loop_dt;
+
     telem.read_dt = micros();
     telem.position = encoder_get_angle();
 
@@ -234,16 +243,20 @@ static void pid_callback(void *args)
     telem.control_dt = micros() - telem.control_dt;
 
     //fill and return telemetry structure
+    telem.telemetry_dt = telem_dt; //get last telemetry delta time
+    telem_dt = micros();
     telem.setpoint = setpoint;
     telem.Kp = controller_config.Kp;
     telem.Ki = controller_config.Ki;
     telem.Ki = controller_config.Kd;
     telem.impedance = controller_config.impedance;
 
-    if(controller_config.telem_queue_handle != NULL) {
+    if((itr % TELEMETRY_SAMPLES_PER_LOOP) == 0 && controller_config.telem_queue_handle != NULL) {
         BaseType_t xHigherPriorityTaskWoken = pdFALSE;
         xQueueSendFromISR(*controller_config.telem_queue_handle, &telem, &xHigherPriorityTaskWoken);
     }
+    itr++;
+    telem_dt = micros() - telem_dt;
 }
 
 

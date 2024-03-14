@@ -20,17 +20,15 @@
 //pcnt
 #include "driver/pcnt.h"
 
+//config
+#include "app/twid32_config.h"
+
 /******************************************************************************/
 /*                               D E F I N E S                                */
 /******************************************************************************/
 
-#define ENCODER_CPR 500
 #define DEGREES_TO_RADIANS 0.01745329251
 #define RADIANS_TO_DEGREES 57.2957795131
-
-#define ENCODER_DEFAULT_FILTER 200
-
-#define ENCODER_VELOCITY_READ_TIMEOUT_US 100000
 
 /******************************************************************************/
 /*                             F U N C T I O N S                              */
