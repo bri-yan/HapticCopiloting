@@ -1,4 +1,4 @@
-# game_interface.py v0.1
+# game_interface.py v0.2
 #   A python serial based protocol with an esp32 for a haptic virtual environment
 # Author: Yousif El-Wishahy (ywishahy@student.ubc.ca)
 
@@ -89,13 +89,18 @@ class GameInterfaceProtocol(asyncio.Protocol):
         self.transport.write(data)
     
     def update_setpoint(self, position:float=0, velocity:float=0, accel:float=0, torque:float=0) -> None:
-        self.transport.write(bytes(f'set_setpoint,{position},{velocity},{accel},{torque},\n',"utf-8"))
+        self.transport.write(bytes(f'game_set_setpoint,{position},{velocity},{accel},{torque},\n',"utf-8"))
 
     def update_impedance(self, K :float=0, B :float=0, J :float= 0) -> None:
         self.transport.write(bytes(f'set_impedance,{K},{B},{J},\n',"utf-8"))
 
     def update_pid(self, Kp :float=0, Ki :float=0, Kd :float= 0) -> None:
         self.transport.write(bytes(f'set_pid,{Kp},{Ki},{Kd},\n',"utf-8"))
+        
+    def configure_controller_default(self) -> None:
+        self.transport.write(bytes(f'reset\n',"utf-8"))
+        self.transport.write(bytes(f'set_mode,position,\n',"utf-8"))
+        self.transport.write(bytes(f'set_pid,10.0,0.0,0.0,\n',"utf-8"))
         
     def bytes2frame(self, data:bytes) -> TelemetryFrame :
         spl = data.decode("utf-8").split(',')
