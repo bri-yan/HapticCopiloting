@@ -46,6 +46,10 @@ Several commands are available to set parameters over the serial interface and t
 
 `"reset\n"` - Resets controller (configuration reverts to default)
 
+`"telemetry_enable\n"` - Enable controller telemetry stream over serial (rate==`TELEMETRY_SAMPLES_PER_LOOP `)
+
+`"telemetry_disable\n"` - Disable controller telemetry stream over serial (rate==`TELEMETRY_SAMPLES_PER_LOOP `)
+
 `"set_pid,<double>,<double>,<double>,\n"` - Set P, I, and D values of PID controller
 
 `"set_impedance,<double>,<double>,<double>,\n"` - Set stiffness, damping, and inertia values of impedane/admittance controller
