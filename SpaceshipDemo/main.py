@@ -14,6 +14,10 @@ from game_objects import Asteroid, EnemyProjectile, EnemyShip, PlayerShip, Path
 
 game_interface: GameInterfaceProtocol
 
+###SERIAL CONFIGURATION for esp32
+SERIAL_PORT = 'COM9'
+SERIAL_BAUD_RATE = 1000000
+
 # async version of pygame.time.Clock
 class AsyncClock:
     def __init__(self, time_func=pygame.time.get_ticks):
@@ -36,6 +40,10 @@ class AsyncClock:
         await asyncio.sleep(delay)
 
 async def run_game():
+    global game_interface, loop
+    transport, game_interface = await serial_asyncio.create_serial_connection(loop, GameInterfaceProtocol, SERIAL_PORT, baudrate=SERIAL_BAUD_RATE)
+    await asyncio.sleep(0.5) #wait for connection to init
+
     # Colors
     WHITE = (255, 255, 255)
     GRAY = (50, 50, 50)
@@ -110,9 +118,6 @@ async def run_game():
     #     Asteroid(3*WIDTH//4 - 100, HEIGHT//2 - 100, asteroid_diameter, asteroid_diameter, asteroid_speed),
     # ]
 
-    global game_interface, loop
-    transport, game_interface = await serial_asyncio.create_serial_connection(loop, GameInterfaceProtocol, 'COM9', baudrate=500000)
-    await asyncio.sleep(0.5) #wait for connection to init
     game_interface.configure_controller_default()
 
     show_path = False
@@ -238,7 +243,7 @@ async def run_game():
             print(f'frame #: {game_interface.frame_count}, frame: {latest_frame}')
 
         # Limit frames per second
-        await clock.tick(60)
+        await clock.tick(45)
 
 loop = asyncio.get_event_loop()
 loop.run_until_complete(run_game())

@@ -1,4 +1,4 @@
-# game_interface.py v0.2
+# game_interface.py v0.3
 #   A python serial based protocol with an esp32 for a haptic virtual environment
 # Author: Yousif El-Wishahy (ywishahy@student.ubc.ca)
 
@@ -16,11 +16,29 @@ class TelemetryFrame:
     """
     Telemetry frame received from the esp32
     """
-    timestamp_ms:int
-    position:float
-    velocity:float
-    position_setpoint:float
-    velocity_setpoint:float
+    timestamp_ms:int=0
+
+    #state based on sensors
+    position:float=0
+    velocity:float=0
+    current:float=0
+    torque_external:float=0
+    torque_control:float=0
+    torque_net:float=0
+
+    #setpoints
+    position_setpoint:float=0
+    velocity_setpoint:float=0
+    accel_setpoint:float=0
+    torque_setpoint:float=0
+    
+    #control params
+    Kp:float=0
+    Ki:float=0
+    Kd:float=0
+    impedance_K:float=0
+    impedance_B:float=0
+    impedance_J:float=0
 
 #serial async protocol for interfacing with the twiddlerino
 class GameInterfaceProtocol(asyncio.Protocol):
@@ -99,15 +117,16 @@ class GameInterfaceProtocol(asyncio.Protocol):
         
     def configure_controller_default(self) -> None:
         self.transport.write(bytes(f'reset\n',"utf-8"))
+        self.transport.write(b'telemetry_disable\n')
         self.transport.write(bytes(f'set_mode,position,\n',"utf-8"))
-        self.transport.write(bytes(f'set_pid,10.0,0.0,0.0,\n',"utf-8"))
+        self.transport.write(bytes(f'set_pid,5.0,0.0,0.0,\n',"utf-8"))
         
     def bytes2frame(self, data:bytes) -> TelemetryFrame :
         spl = data.decode("utf-8").split(',')
         # print(spl, len(spl))
-        if len(spl) != 7:
-            raise Exception("cannot convert bytes to telemetry frame!")
-        t = TelemetryFrame(0,0,0,0,0)
+        if len(spl) != 19:
+            raise Exception(f'cannot convert bytes to telemetry frame! len: {len(spl)}')
+        t = TelemetryFrame()
         for item in spl[1:-1]:
             spl2 = item.split(':')
             name = spl2[0]

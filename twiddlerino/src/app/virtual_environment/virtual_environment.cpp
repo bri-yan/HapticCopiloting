@@ -103,8 +103,14 @@ uint32_t game_send_data() {
     telemetry_t t;
     tcontrol_get_state(&t);
     if(Serial) {
-        size = Serial.printf("/*TWIDDLERINO_TELEMETRY,timestamp_ms:%lu,position:%lf,velocity:%lf,position_setpoint:%lf,velocity_setpoint:%lf,*/\n", 
-            t.timestamp_ms, t.position, t.filtered_velocity, t.setpoint.pos, t.setpoint.vel);
+        // size = Serial.printf("/*TWIDDLERINO_TELEMETRY,timestamp_ms:%lu,position:%lf,velocity:%lf,position_setpoint:%lf,velocity_setpoint:%lf,*/\n", 
+        //     t.timestamp_ms, t.position, t.filtered_velocity, t.setpoint.pos, t.setpoint.vel);
+
+        size = Serial.printf("/*TWIDDLERINO_TELEMETRY,timestamp_ms:%lu,position:%lf,velocity:%lf,current:%lf,torque_external:%lf,torque_control:%lf,torque_net:%lf,position_setpoint:%lf,velocity_setpoint:%lf,accel_setpoint:%lf,torque_setpoint:%lf,Kp:%lf,Ki:%lf,Kd:%lf,impedance_K:%lf,impedance_B:%lf,impedance_J:%lf,*/\n", 
+            t.timestamp_ms,
+            t.position, t.filtered_velocity, t.filtered_current, t.torque_external, t.torque_control, t.torque_net,
+            t.setpoint.pos, t.setpoint.vel, t.setpoint.accel, t.setpoint.torque,
+            t.Kp, t.Ki, t.Kd, t.impedance.K, t.impedance.B, t.impedance.J);
     }
     return size;
 }
