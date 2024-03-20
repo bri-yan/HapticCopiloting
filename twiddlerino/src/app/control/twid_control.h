@@ -13,38 +13,23 @@
 /******************************************************************************/
 
 #include "Arduino.h"
-#include "drivers/motor.h"
+#include "app/twid32_config.h"
 
 /******************************************************************************/
 /*                               D E F I N E S                                */
 /******************************************************************************/
-
-//macro for struct (partial) init to fill out default controller parameters
-//CHANGE CONTROLLER DEFAULT CONFIG HERE!!!!
-#define INIT_CONTROLLER_CONFIG(X) controller_config_t X = {\
-    .control_type = control_type_t::POSITION_CTRL,\
-    .setpoint_type = setpoint_type_t::CONSTANT_SETPOINT_MODE,\
-    .init_setpoint = {.pos = 0.0, .vel = 0.0, .accel = 0.0, .torque = 0.0},\
-    .controller_direction = controller_direction_t::NEGATIVE_FEEDBACK,\
-    .sample_time_us = 1000,\
-    .Kp = 0.5, .Ki = 0.01, .Kd = 0.01, .N = 1.0,\
-    .velocity_filter_const = 0.01,\
-    .current_filter_const = 0.1,\
-    .motor_Kv = 0.025, .motor_Ke = 0.011, .motor_J = 1e-6,\
-    .impedance = {.K = 1e-3, .B = 0.01, .J = 1e-6},\
-    .output_hlim = MOTOR_DUTY_CYCLE_RES, .output_llim = -MOTOR_DUTY_CYCLE_RES\
-}
 
 /******************************************************************************/
 /*                              T Y P E D E F S                               */
 /******************************************************************************/
 
 typedef enum {
-    POSITION_CTRL,
-    VELOCITY_CTRL,
-    TORQUE_CTRL,
-    IMPEDANCE_CTRL,
-    ADMITTANCE_CTRL
+    POSITION_CTRL,      //position pid control
+    VELOCITY_CTRL,      //velocity pid control
+    TORQUE_CTRL,        //torque pid control
+    IMPEDANCE_CTRL,     //cascaded impedance control with torque pid control inner loop
+    ADMITTANCE_CTRL,    //cascaded admittance control with position pid control inner loop
+    NO_CTRL             //no control, telemetry only
 } control_type_t;
 
 typedef enum {
@@ -124,8 +109,8 @@ class DiscretePID {
 
   private:
     controller_direction_t direction = controller_direction_t::NEGATIVE_FEEDBACK;
-    int32_t OUTPUT_MAX = MOTOR_DUTY_CYCLE_RES;
-    int32_t OUTPUT_MIN = -MOTOR_DUTY_CYCLE_RES;
+    int32_t OUTPUT_MAX = 1024;
+    int32_t OUTPUT_MIN = -1024;
     double Kp = 0.0, Ki = 0.0, Kd = 0.0; //pid params
     double h; //controller discrete step time in seconds
     double N; //derivative filter constant
@@ -140,20 +125,30 @@ class DiscretePID {
 /*                             F U N C T I O N S                              */
 /******************************************************************************/
 
-void tcontrol_configure(controller_config_t*);
+//configure controller and timer isr
+//this function must be run before tcontrol_start or an error will be thrown
+void tcontrol_cfg(controller_config_t*);
 
+//starts control timer isr
 void tcontrol_start();
 
+//stops control timer isr
 void tcontrol_stop();
 
+//resets to default config and restarts control timer isr
 void tcontrol_reset();
 
+//returns true if the pid timer isr is active
 bool tcontrol_is_running();
 
-void tcontrol_update_trajectory(setpoint_t*);
+//copies config to destination
+void tcontrol_get_cfg(controller_config_t*);
 
-void tcontrol_update_tunings(double kp, double ki, double kd, controller_direction_t dir);
+//set a new setpoint target
+void tcontrol_update_setpoint(setpoint_t*);
 
-void tcontrol_update_tunings(controller_config_t* config);
+//update existing configuration
+//NOTE!!! this will only update gains for pid, impedance, and control mode for now
+void tcontrol_update_cfg(controller_config_t*);
 
 #endif //TWID_CONTROL_H_

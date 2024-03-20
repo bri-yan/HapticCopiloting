@@ -14,6 +14,9 @@
 //twiddler pin definitions
 #include "app/twid32_pin_defs.h"
 
+//CONFIG 
+#include "app/twid32_config.h"
+
 //drivers
 #include "drivers/encoder.h"
 #include "drivers/motor.h"
@@ -34,10 +37,6 @@
 /******************************************************************************/
 /*                               D E F I N E S                                */
 /******************************************************************************/
-
-#define TELEMETRY_QUEUE_SIZE 500U
-#define COMMAND_QUEUE_SIZE 10U
-#define UART_BAUD_RATE 500000U
 
 /******************************************************************************/
 /*                              T Y P E D E F S                               */
@@ -206,13 +205,13 @@ void TaskRunTControl(void *pvParameters){
   //initial hardware state
   encoder_clear_count();
 
-  tcontrol_configure(&control_config);
+  tcontrol_cfg(&control_config);
   tcontrol_start();
   Serial.printf("Controller runnning: %i\n",tcontrol_is_running());
 
   for(;;)
   {
-    vTaskDelay(0);
+    vTaskDelay(1);
   }
 }
 
@@ -229,10 +228,40 @@ void TaskUpdateTControlParams(void *pvParameters) {
     if( Serial.available()) {
       read_string = read_string_until('\n');
       Serial.printf("Received data: %s\n", read_string);
-      if(read_string.substring(0,5).compareTo("STOP") == 0){
+      if(read_string == "STOP" || read_string == "stop"){
         tcontrol_stop();
-      }else if(read_string.substring(0,8).compareTo("RESET") == 0){
+      } else if(read_string == "RESET" || read_string == "reset"){
         tcontrol_reset();
+      } else if(read_string.substring(0,12) == "set_setpoint"){
+        double vals[4] = {0.0, 0.0, 0.0, 0.0};
+        extract_doubles(&read_string, vals, 4);
+  
+        setpoint_t sp;
+        sp.pos = vals[0];
+        sp.vel = vals[1];
+        sp.accel = vals[2];
+        sp.torque = vals[3];
+
+        tcontrol_update_setpoint(&sp);
+        Serial.printf("Setpoint updated.\n");
+      } else if(read_string.substring(0,13) == "set_dutycycle") {
+          int16_t i0 = read_string.indexOf(',',0);
+          i0+=1;
+          int16_t i = read_string.indexOf(',',i0);
+          int32_t dc = read_string.substring(i0,i).toInt();
+          motor_set_pwm(dc);
+          Serial.printf("Set pwm duty cycle to %li with frequency %lu.\nMotor State: %i.\n",
+          motor_get_duty_cycle(), motor_get_frequency(), motor_get_state());
+      } else {
+        controller_config_t cfg;
+        tcontrol_get_cfg(&cfg);
+
+        if(decode_config_cmd(&read_string, &cfg)){
+          tcontrol_update_cfg(&cfg);
+          Serial.printf("Controller config updated.\n");
+        }
+
+        print_controller_cfg();
       }
     }
 
@@ -259,7 +288,7 @@ void TaskReadCommands(void *pvParameters) {
   {
     if( Serial.available() ) {
       read_string = read_string_until('\n');
-      cmd_type = decode_cmd(&read_string, &test_config);
+      cmd_type = decode_test_cmd(&read_string, &test_config);
 
       Serial.printf("read line \"%s\" and decoded command %i\n",read_string,cmd_type);
 

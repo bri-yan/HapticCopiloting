@@ -12,11 +12,15 @@
 //header for this file
 #include "app/control/twid_control.h"
 
+//config
+#include "app/twid32_config.h"
+
 //hardware drivers
 #include "drivers/encoder.h"
 #include "drivers/motor.h"
 #include "drivers/current_sensor.h"
 
+//communication
 #include "app/comms.h"
 
 //filters
@@ -40,6 +44,9 @@
 
 static void pid_callback(void *args);
 
+//stop motor and abort if speed is too high
+static void motor_safety_check(double speed);
+
 /******************************************************************************/
 /*               P R I V A T E  G L O B A L  V A R I A B L E S                */
 /******************************************************************************/
@@ -49,8 +56,10 @@ static portMUX_TYPE spinlock = portMUX_INITIALIZER_UNLOCKED;
 //controller information to be passed to callback function
 INIT_CONTROLLER_CONFIG(controller_config);
 static setpoint_t setpoint = {.pos = 0.0, .vel =0.0, .accel = 0.0, .torque = 0.0};
-static uint32_t last_time = 0.0;
-static uint32_t start_time = 0.0;
+static uint32_t last_time = 0; //last loop timestamp us
+static uint32_t start_time = 0; //start timestamp us
+static uint32_t telem_dt = 0; //telemetry code delta time in us
+static uint32_t itr = 0; //loop iterations
 static telemetry_t telem;
 static EwmaFilter velocity_filt_ewa(controller_config.velocity_filter_const, 0.0);
 static EwmaFilter current_filt_ewa(controller_config.current_filter_const, 0.0);
@@ -58,27 +67,27 @@ static DiscretePID pid_controller(&controller_config);
 
 //pid timer handle
 //https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/system/esp_timer.html
-esp_timer_handle_t pid_timer;
+static esp_timer_handle_t pid_timer;
 
 /******************************************************************************/
 /*                       P U B L I C  F U N C T I O N S                       */
 /******************************************************************************/
 
-void tcontrol_configure(controller_config_t* config) {
+void tcontrol_cfg(controller_config_t* config) {
     if(tcontrol_is_running()){
         tcontrol_stop();
     }
 
     controller_config = *config;
     setpoint = {.pos = 0.0, .vel =0.0, .accel = 0.0};
-    last_time = 0.0;
-    start_time = 0.0;
+    last_time = 0;
+    start_time = 0;
+    telem_dt = 0;
+    itr = 0;
     velocity_filt_ewa = EwmaFilter(controller_config.velocity_filter_const, 0.0);
     current_filt_ewa = EwmaFilter(controller_config.current_filter_const, 0.0);
     pid_controller = DiscretePID(&controller_config);
     telem.current_sps = current_sensor_sps();
-
-    tcontrol_update_tunings(&controller_config);
 
     const esp_timer_create_args_t timer_args = {
         .callback = pid_callback,
@@ -91,7 +100,8 @@ void tcontrol_configure(controller_config_t* config) {
     }
 
     if(Serial.availableForWrite()){
-        Serial.printf("Controller config complete\n");
+        Serial.printf("Controller config complete.\n");
+        print_controller_cfg();
     }
 }
 
@@ -101,15 +111,17 @@ void tcontrol_start(){
         start_time = micros();
         ESP_ERROR_CHECK(esp_timer_start_periodic(pid_timer, controller_config.sample_time_us));
         if(Serial.availableForWrite()){
-            Serial.printf("Controller timer started\n");
+            Serial.printf("Controller timer started.\n");
         }
     }
 }
 
 void tcontrol_stop(){
-    ESP_ERROR_CHECK(esp_timer_stop(pid_timer));
-    if(Serial.availableForWrite()){
-        Serial.printf("Controller timer stopped.\n");
+    if(esp_timer_is_active(pid_timer)) {
+        ESP_ERROR_CHECK(esp_timer_stop(pid_timer));
+        if(Serial.availableForWrite()){
+            Serial.printf("Controller timer stopped.\n");
+        }
     }
 }
 
@@ -118,7 +130,7 @@ void tcontrol_reset(){
     INIT_CONTROLLER_CONFIG(def);
     def.telem_queue_handle = controller_config.telem_queue_handle;
     controller_config = def;
-    tcontrol_configure(&controller_config);
+    tcontrol_cfg(&controller_config);
     tcontrol_start();
 }
 
@@ -126,22 +138,28 @@ bool tcontrol_is_running(){
     return esp_timer_is_active(pid_timer);
 }
 
-void tcontrol_update_trajectory(setpoint_t* tp) {
+void tcontrol_get_cfg(controller_config_t* cfg_out) {
+    _ENTER_CRITICAL();
+    *cfg_out = controller_config;
+    _EXIT_CRITICAL();
+}
+
+void tcontrol_update_setpoint(setpoint_t* tp) {
     _ENTER_CRITICAL();
     setpoint = *tp;
     _EXIT_CRITICAL();
 }
 
-void tcontrol_update_tunings(double kp, double ki, double kd, controller_direction_t direction) {
-    _ENTER_CRITICAL(); 
-    pid_controller.set_gains(kp, ki, kd);
-    pid_controller.set_direction(direction);
-    _EXIT_CRITICAL();
-}
-
-void tcontrol_update_tunings(controller_config_t* config) {
-    _ENTER_CRITICAL(); 
-    pid_controller.set_all_params(config);
+void tcontrol_update_cfg(controller_config_t* cfg) {
+    _ENTER_CRITICAL();
+    controller_config.Kp = cfg->Kp;
+    controller_config.Ki = cfg->Ki;
+    controller_config.Kd = cfg->Kd;
+    controller_config.impedance.K = cfg->impedance.K;
+    controller_config.impedance.J = cfg->impedance.J;
+    controller_config.impedance.B = cfg->impedance.B;
+    controller_config.control_type = cfg->control_type;
+    pid_controller.set_all_params(&controller_config);
     _EXIT_CRITICAL();
 }
 
@@ -151,11 +169,11 @@ void tcontrol_update_tunings(controller_config_t* config) {
 
 static void pid_callback(void *args)
 {
-    telem.timestamp_ms = (micros() - start_time)/1000.0;
-
     //sensor read segment 
+    telem.timestamp_ms = (micros() - start_time)/1000.0;
     telem.loop_dt = micros() - last_time;
     last_time += telem.loop_dt;
+
     telem.read_dt = micros();
     telem.position = encoder_get_angle();
 
@@ -165,6 +183,9 @@ static void pid_callback(void *args)
 
     //read and filter velocity
     telem.velocity = encoder_get_velocity();
+
+    motor_safety_check(telem.velocity);
+
     telem.filtered_velocity = velocity_filt_ewa(telem.velocity);
 
     //calculate torque
@@ -217,8 +238,8 @@ static void pid_callback(void *args)
             setpoint_signal = 0;
             break;
         default:
-            feedback_signal = telem.position;
-            setpoint_signal = setpoint.pos;
+            feedback_signal = 0;
+            setpoint_signal = 0;
             break;
     }
 
@@ -226,28 +247,43 @@ static void pid_callback(void *args)
     telem.error = pid_controller.get_error();
 
     //apply control signal
-    telem.pwm_duty_cycle = motor_set_pwm(output_signal);
+    if(controller_config.control_type != control_type_t::NO_CTRL) {
+        telem.pwm_duty_cycle = motor_set_pwm(output_signal);
+    } else {
+        telem.pwm_duty_cycle = (double)motor_get_duty_cycle();
+    }
     telem.pwm_frequency = motor_get_frequency();
     telem.control_dt = micros() - telem.control_dt;
 
     //fill and return telemetry structure
+    telem.telemetry_dt = telem_dt; //get last telemetry delta time
+    telem_dt = micros();
     telem.setpoint = setpoint;
     telem.Kp = controller_config.Kp;
     telem.Ki = controller_config.Ki;
     telem.Ki = controller_config.Kd;
     telem.impedance = controller_config.impedance;
 
-    if(controller_config.telem_queue_handle != NULL) {
+    if((itr % TELEMETRY_SAMPLES_PER_LOOP) == 0 && controller_config.telem_queue_handle != NULL) {
         BaseType_t xHigherPriorityTaskWoken = pdFALSE;
         xQueueSendFromISR(*controller_config.telem_queue_handle, &telem, &xHigherPriorityTaskWoken);
     }
+    itr++;
+    telem_dt = micros() - telem_dt;
 }
 
+static void motor_safety_check(double speed) {
+    if(speed > MOTOR_MAX_SPEED_DEGS || speed < -MOTOR_MAX_SPEED_DEGS) {
+        motor_set_pwm(0);
+        motor_set_state(motor_state_t::MOTOR_LOW);
+        Serial.printf("Motor speed is too fast! %lf deg/s", speed);
+        esp_system_abort("Aborting! Motor speed is too fast!");
+    }
+}
 
 /******************************************************************************/
 /*                                 C L A S S                                  */
 /******************************************************************************/
-
 
 DiscretePID::DiscretePID(double kp, double ki, double kd, double h) {
     this->N = 1.0;
@@ -278,7 +314,7 @@ DiscretePID::DiscretePID(controller_config_t* cfg) {
     reinit();
 }
 
-void DiscretePID::reinit(){
+void DiscretePID::reinit() {
     last_measured = 0.0;
     last_setpoint = 0.0;
     last_output = 0.0;
