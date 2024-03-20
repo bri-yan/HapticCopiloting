@@ -1,10 +1,21 @@
+# game_interface.py
+#   A python serial based protocol with an esp32 for a haptic virtual environment
+# Author: Yousif El-Wishahy (ywishahy@student.ubc.ca)
+
+#import async for and serial_asycnc for protocol
 import asyncio
 import serial_asyncio
-import queue
+
 from dataclasses import dataclass
+
+import queue
+
 
 @dataclass
 class TelemetryFrame:
+    """
+    Telemetry frame received from the esp32
+    """
     timestamp_ms:int
     position:float
     velocity:float
@@ -13,6 +24,12 @@ class TelemetryFrame:
 
 #serial async protocol for interfacing with the twiddlerino
 class GameInterfaceProtocol(asyncio.Protocol):
+    """
+    Vritual Enviornment Serial Protocol based on asyncio for async serial.
+    Features:
+        Processes bytes into TelemetryFrame classes for use in the virtual environment.
+        Functions avaialable to update config /control targers  on esp32 such as setpoint, and gains.
+    """
     frame_count:int = 0
     last_frame:TelemetryFrame = None
     frames:queue.Queue = queue.Queue(1000)
