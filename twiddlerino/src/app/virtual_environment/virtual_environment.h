@@ -1,11 +1,12 @@
 /**
- * @file twiddlerino.h
- * @brief Twiddlerino main file
+ * @file virtual_environment.h
+ * @brief Code related to haptic virtual environment interface
  * @author Yousif El-Wishahy (ywishahy@student.ubc.ca)
+ * 
  */
 
-#ifndef TWIDDLERINO_H_
-#define TWIDDLERINO_H_
+#ifndef VIRTUAL_ENVIRONMENT_H_
+#define VIRTUAL_ENVIRONMENT_H_
 
 /******************************************************************************/
 /*                              I N C L U D E S                               */
@@ -21,27 +22,23 @@
 /******************************************************************************/
 
 /******************************************************************************/
-/*                              T Y P E D E F S                               */
-/******************************************************************************/
-
-/**
- * @brief Twiddlerino Startup State
- * 
- */
-typedef enum {
-    IDLE,
-    RUN_CONTROLLER_DEFAULT,
-    RUN_TELEMETRY_ONLY,
-    RUN_AWAIT_COMMANDS,
-    RUN_TCONTROL_DEFAULT
-} startup_type_t;
-
-/******************************************************************************/
 /*                             F U N C T I O N S                              */
 /******************************************************************************/
 
-//initializes Twiddlerino
-void twiddlerino_setup(startup_type_t startup_type = startup_type_t::IDLE);
+/**
+ * @brief Process a game command string and return true if successfull
+ * 
+ */
+bool game_process_command(String *);
 
-#endif //TWIDDLERINO_H_
+/**
+ * @brief Start game interface to send data back
+ * 
+ */
+void game_interface_init();
 
+void game_interface_stop();
+
+void game_interface_restart();
+
+#endif // VIRTUAL_ENVIRONMENT_H_

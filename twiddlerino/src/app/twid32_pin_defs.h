@@ -19,8 +19,8 @@
 /******************************************************************************/
 
 //encoder
-#define PIN_ENCODER_QUAD_A  gpio_num_t::GPIO_NUM_25  //Encoder quaderture signal A
-#define PIN_ENCODER_QUAD_B  gpio_num_t::GPIO_NUM_26   //Encoder quaderture signal b
+#define PIN_ENCODER_QUAD_A  gpio_num_t::GPIO_NUM_36   //Encoder quaderture signal A
+#define PIN_ENCODER_QUAD_B  gpio_num_t::GPIO_NUM_39   //Encoder quaderture signal b
 
 //current sensor (communicates through i2c interface)
 #define PIN_CURRENT_SENS_ADC_SCL  gpio_num_t::GPIO_NUM_22

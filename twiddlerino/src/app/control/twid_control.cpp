@@ -2,7 +2,6 @@
  * @file twid_control.c
  * @brief Control class for implementing the various controllers for the twiddlerino
  * @author Yousif El-Wishahy (ywishahy@student.ubc.ca)
- *         Based on PID_v1 library but modified to use timer interrupts
  */
 
 /******************************************************************************/
@@ -20,11 +19,11 @@
 #include "drivers/motor.h"
 #include "drivers/current_sensor.h"
 
-//communication
-#include "app/comms.h"
-
 //filters
 #include "app/filter/ewma_filter.h"
+
+//comms
+#include "app/comms.h"
 
 /******************************************************************************/
 /*                               D E F I N E S                                */
@@ -43,9 +42,6 @@
 /******************************************************************************/
 
 static void pid_callback(void *args);
-
-//stop motor and abort if speed is too high
-static void motor_safety_check(double speed);
 
 /******************************************************************************/
 /*               P R I V A T E  G L O B A L  V A R I A B L E S                */
@@ -141,6 +137,12 @@ bool tcontrol_is_running(){
 void tcontrol_get_cfg(controller_config_t* cfg_out) {
     _ENTER_CRITICAL();
     *cfg_out = controller_config;
+    _EXIT_CRITICAL();
+}
+
+void tcontrol_get_state(telemetry_t* telem_out) {
+    _ENTER_CRITICAL();
+    *telem_out = telem;
     _EXIT_CRITICAL();
 }
 
@@ -261,7 +263,7 @@ static void pid_callback(void *args)
     telem.setpoint = setpoint;
     telem.Kp = controller_config.Kp;
     telem.Ki = controller_config.Ki;
-    telem.Ki = controller_config.Kd;
+    telem.Kd = controller_config.Kd;
     telem.impedance = controller_config.impedance;
 
     if((itr % TELEMETRY_SAMPLES_PER_LOOP) == 0 && controller_config.telem_queue_handle != NULL) {
@@ -270,15 +272,6 @@ static void pid_callback(void *args)
     }
     itr++;
     telem_dt = micros() - telem_dt;
-}
-
-static void motor_safety_check(double speed) {
-    if(speed > MOTOR_MAX_SPEED_DEGS || speed < -MOTOR_MAX_SPEED_DEGS) {
-        motor_set_pwm(0);
-        motor_set_state(motor_state_t::MOTOR_LOW);
-        Serial.printf("Motor speed is too fast! %lf deg/s", speed);
-        esp_system_abort("Aborting! Motor speed is too fast!");
-    }
 }
 
 /******************************************************************************/

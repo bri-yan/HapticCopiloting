@@ -4,14 +4,14 @@
  * @author Yousif El-Wishahy (ywishahy@student.ubc.ca)
  */
 
-#ifndef COMMS_H
-#define COMMS_H
+#ifndef COMMS_H_
+#define COMMS_H_
 
 /******************************************************************************/
 /*                              I N C L U D E S                               */
 /******************************************************************************/
 
-#include "app/control/twid_control.h"
+#include "app/control/control_types.h"
 
 //for int types
 #include <stdint.h>
@@ -25,43 +25,6 @@
 /******************************************************************************/
 /*                              T Y P E D E F S                               */
 /******************************************************************************/
-
-/**
- * @brief Control Loop telemetry
- * 
- */
-typedef struct {
-    //timing
-    uint32_t timestamp_ms;
-    uint32_t loop_dt;
-    uint32_t read_dt;
-    uint32_t control_dt;
-    uint32_t telemetry_dt;
-
-    //control variables
-    setpoint_t setpoint;
-    double error;
-    double position; //position in deg
-    double velocity; //velocity in deg/s
-    double filtered_velocity; //low pass filtered velocity
-    double current; //in amps
-    double filtered_current; //low pass filtered current
-    double torque_net; //net torque
-    double torque_control; //expected control torque
-    double torque_external; //estimated external torque
-    double pwm_duty_cycle;
-    uint32_t pwm_frequency; //in Hz
-    double current_sps; //current sensor ADC samples/second
-
-    //controller params
-    double Kp;
-    double Ki;
-    double Kd;
-    virtual_impedance_t impedance;
-
-    //other
-    bool pid_success_flag;
-} telemetry_t;
 
 /**
  * @brief Command Types
@@ -105,8 +68,11 @@ typedef union {
 /*                             F U N C T I O N S                              */
 /******************************************************************************/
 
+//deprecated - read test commands
 cmd_type_t decode_test_cmd(String *, test_config_t *);
 
+// read controller config strings, will return false if string is invalid/not recognized, 
+// otherwise will fill config struct
 bool decode_config_cmd(String *, controller_config_t *);
 
 /**
@@ -127,9 +93,10 @@ uint32_t publish_telemetry_serial_studio(telemetry_t *telem);
  */
 uint32_t print_controller_cfg();
 
+// read string until terminator
 String read_string_until(char terminator);
 
-//extract doubles from string
+// extract doubles from string
 void extract_doubles(String *, double*, uint16_t);
 
-#endif //COMMS_H
+#endif //COMMS_H_

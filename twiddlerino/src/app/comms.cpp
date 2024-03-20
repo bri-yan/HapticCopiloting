@@ -12,10 +12,13 @@
 //library header
 #include "app/comms.h"
 
+//comms types for telem and command
+#include "app/control/twid_control.h"
+
 #include "Arduino.h"
 
-#include "twiddlerino.h"
-#include "app/control/twid_control.h"
+#include "twiddlerino_main.h"
+
 
 /******************************************************************************/
 /*                               D E F I N E S                                */
@@ -45,70 +48,9 @@ static char timed_read();
 /*                       P U B L I C  F U N C T I O N S                       */
 /******************************************************************************/
 
-//initializes Twiddlerino
-cmd_type_t decode_test_cmd(String * read_string, test_config_t *t) {
-    int32_t i = 0;
-    int32_t i0 = 0;
-    t->cmd_type = cmd_type_t::NA_CMD;
-
-    //'config_test,P:{params.P},I:{params.I},D:{params.D},set_point:{params.SetPoint}'
-    if(read_string->substring(0,11).compareTo("config_test") == 0){
-        t->cmd_type = cmd_type_t::CONFIG_TEST;
-
-        i0 = read_string->indexOf(':',0);
-        i0+=1;
-        i = read_string->indexOf(',',i0);
-        t->Kp = read_string->substring(i0,i).toDouble();
-        Serial.printf("substring decoded from %i to %i : %s\n",i0,i,read_string->substring(i0,i));
-
-        i0 = read_string->indexOf(':',i0+1);
-        i0+=1;
-        i = read_string->indexOf(',',i0);
-        t->Ki = read_string->substring(i0,i).toDouble();
-        Serial.printf("substring decoded from %i to %i : %s\n",i0,i,read_string->substring(i0,i));
-
-        i0 = read_string->indexOf(':',i0+1);
-        i0+=1;
-        i = read_string->indexOf(',',i0);
-        t->Kd = read_string->substring(i0,i).toDouble();
-        Serial.printf("substring decoded from %i to %i : %s\n",i0,i,read_string->substring(i0,i));
-
-        i0 = read_string->indexOf(':',i0+1);
-        i0+=1;
-        i = read_string->indexOf(',',i0);
-        t->set_point = read_string->substring(i0,i).toDouble();
-        Serial.printf("substring decoded from %i to %i : %s\n",i0,i,read_string->substring(i0,i));
-
-        i0 = read_string->indexOf(':',i0+1);
-        i0+=1;
-        i = read_string->indexOf(',',i0);
-        t->sample_rate_us = read_string->substring(i0,i).toInt();
-        Serial.printf("substring decoded from %i to %i : %s\n",i0,i,read_string->substring(i0,i));
-
-        i0 = read_string->indexOf(':',i0+1);
-        i0+=1;
-        i = read_string->indexOf(',',i0);
-        if (i < 0 || i > read_string->length()) {
-            i = read_string->length();
-        }
-        t->test_duration_ms = read_string->substring(i0,i).toInt();
-        Serial.printf("substring decoded from %i to %i : %s\n",i0,i,read_string->substring(i0,i));
-
-        // Serial.printf("Starting control task with params:\n\t\tKp:%lf\tKi:%lf\tKd:%lf\tsample_rate_us:%lu\ttest_duration_ms:%lu\n",
-        //   t.Kp,t.Ki,t.Kd,t.sample_rate_us,t.test_duration_ms);
-    } else if (read_string->substring(0,10).compareTo("start_test") == 0) {
-        t->cmd_type = cmd_type_t::START_TEST;
-    } else if (read_string->substring(0,10).compareTo("abort_test") == 0) {
-        t->cmd_type = cmd_type_t::ABORT_TEST;
-    }
-
-    return t->cmd_type;
-}
-
-
 bool decode_config_cmd(String *str, controller_config_t *cfg) {
     if(str->substring(0,7).compareTo("set_pid") == 0){
-        double vals[3] = {0.0,0.0,0.0};
+        double vals[3] = {0.0 ,0.0, 0.0};
         extract_doubles(str, vals, 3);
         cfg->Kp = vals[0];
         cfg->Ki = vals[1];
@@ -215,6 +157,66 @@ void extract_doubles(String * str, double* out, uint16_t num_values) {
         out[j] = str->substring(i0,i).toDouble();
         i++;
     }
+}
+
+//initializes Twiddlerino
+cmd_type_t decode_test_cmd(String * read_string, test_config_t *t) {
+    int32_t i = 0;
+    int32_t i0 = 0;
+    t->cmd_type = cmd_type_t::NA_CMD;
+
+    //'config_test,P:{params.P},I:{params.I},D:{params.D},set_point:{params.SetPoint}'
+    if(read_string->substring(0,11).compareTo("config_test") == 0){
+        t->cmd_type = cmd_type_t::CONFIG_TEST;
+
+        i0 = read_string->indexOf(':',0);
+        i0+=1;
+        i = read_string->indexOf(',',i0);
+        t->Kp = read_string->substring(i0,i).toDouble();
+        Serial.printf("substring decoded from %i to %i : %s\n",i0,i,read_string->substring(i0,i));
+
+        i0 = read_string->indexOf(':',i0+1);
+        i0+=1;
+        i = read_string->indexOf(',',i0);
+        t->Ki = read_string->substring(i0,i).toDouble();
+        Serial.printf("substring decoded from %i to %i : %s\n",i0,i,read_string->substring(i0,i));
+
+        i0 = read_string->indexOf(':',i0+1);
+        i0+=1;
+        i = read_string->indexOf(',',i0);
+        t->Kd = read_string->substring(i0,i).toDouble();
+        Serial.printf("substring decoded from %i to %i : %s\n",i0,i,read_string->substring(i0,i));
+
+        i0 = read_string->indexOf(':',i0+1);
+        i0+=1;
+        i = read_string->indexOf(',',i0);
+        t->set_point = read_string->substring(i0,i).toDouble();
+        Serial.printf("substring decoded from %i to %i : %s\n",i0,i,read_string->substring(i0,i));
+
+        i0 = read_string->indexOf(':',i0+1);
+        i0+=1;
+        i = read_string->indexOf(',',i0);
+        t->sample_rate_us = read_string->substring(i0,i).toInt();
+        Serial.printf("substring decoded from %i to %i : %s\n",i0,i,read_string->substring(i0,i));
+
+        i0 = read_string->indexOf(':',i0+1);
+        i0+=1;
+        i = read_string->indexOf(',',i0);
+        if (i < 0 || i > read_string->length()) {
+            i = read_string->length();
+        }
+        t->test_duration_ms = read_string->substring(i0,i).toInt();
+        Serial.printf("substring decoded from %i to %i : %s\n",i0,i,read_string->substring(i0,i));
+
+        // Serial.printf("Starting control task with params:\n\t\tKp:%lf\tKi:%lf\tKd:%lf\tsample_rate_us:%lu\ttest_duration_ms:%lu\n",
+        //   t.Kp,t.Ki,t.Kd,t.sample_rate_us,t.test_duration_ms);
+    } else if (read_string->substring(0,10).compareTo("start_test") == 0) {
+        t->cmd_type = cmd_type_t::START_TEST;
+    } else if (read_string->substring(0,10).compareTo("abort_test") == 0) {
+        t->cmd_type = cmd_type_t::ABORT_TEST;
+    }
+
+    return t->cmd_type;
 }
 
 /******************************************************************************/
