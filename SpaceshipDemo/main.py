@@ -15,7 +15,7 @@ from game_objects import Asteroid, EnemyProjectile, EnemyShip, PlayerShip, Path
 game_interface: GameInterfaceProtocol
 
 ###SERIAL CONFIGURATION for esp32
-SERIAL_PORT = 'COM9'
+SERIAL_PORT = 'COM4'
 SERIAL_BAUD_RATE = 1000000
 
 # async version of pygame.time.Clock
@@ -112,15 +112,16 @@ async def run_game():
     index = 0
     xs = [3*WIDTH//4, 3*WIDTH//4 - 50, 3*WIDTH//4 - 100]
     print(3*WIDTH//4)
-    # Main game loop
+    
     # asteroids = [
     #     Asteroid(3*WIDTH//4, HEIGHT//2, asteroid_diameter, asteroid_diameter, asteroid_speed),
     #     Asteroid(3*WIDTH//4 - 100, HEIGHT//2 - 100, asteroid_diameter, asteroid_diameter, asteroid_speed),
     # ]
 
     game_interface.configure_controller_default()
-
-    show_path = False
+    show_path = True
+    
+    # Main game loop
     while True:
         # Handle game events
         index = index % len(xs)
@@ -159,19 +160,6 @@ async def run_game():
                 if projectile.colliderect(ship):
                     projectiles = deque(maxlen=max_projectiles)
                     asteroids = deque(maxlen=max_asteroids)
-        
-        # Handle enemy movement
-        handle_enemy_movement()
-
-        # Handle player movement
-        keys = pygame.key.get_pressed()
-        for idx, ship in enumerate(ships):
-            left, right = keys[controls[idx][0]], keys[controls[idx][1]]
-            if left or right:
-                if right:
-                    ship.thrust_right() # Accelerate to the right
-                if left:
-                    ship.thrust_left()
             
         # Clear the screen
         screen.fill(BLACK)
@@ -195,10 +183,10 @@ async def run_game():
             pygame.draw.polygon(screen, LIGHT_PURPLE, ship.body_vertices)
         
             ship.switch = not ship.switch
-            error = (right_ship.x - left_ship.x - tether_equilibrium)
-            error = error*abs(error) # allows for tether to push ships apart
-            left_ship.accelerate(tether_k*error)
-            right_ship.accelerate(-tether_k*error)
+            # delta = (right_ship.x - left_ship.x - tether_equilibrium)
+            # # delta = delta*abs(delta) # allows for tether to push ships apart
+            # left_ship.accelerate(tether_k*delta)
+            # right_ship.accelerate(-tether_k*delta)
             ship.move()
 
         for asteroid in asteroids:
@@ -215,6 +203,19 @@ async def run_game():
         left_path.adjust(left_ship.x, asteroids, 50, screen)
         right_path.adjust(right_ship.x, asteroids, -50, screen)
 
+        # Handle enemy movement
+        handle_enemy_movement()
+
+        # Handle player movement
+        keys = pygame.key.get_pressed()
+        for idx, ship in enumerate(ships[:1]): # TODO: remove slice
+            left, right = keys[controls[idx][0]], keys[controls[idx][1]]
+            if left or right:
+                if right:
+                    ship.thrust_right() # Accelerate to the right
+                if left:
+                    ship.thrust_left()
+
         if keys[pygame.K_t]:
             show_path = not show_path
         if show_path:
@@ -226,8 +227,8 @@ async def run_game():
                     else:
                         pygame.draw.rect(screen, WHITE, crumb)
         
-
-        for idx, ship in enumerate(ships):
+        # Handle pathing
+        for idx, ship in enumerate(ships[:1]): # TODO: remove slice
             left, right = keys[controls[idx][0]], keys[controls[idx][1]]
             if not left and not right:
                 ship.pid_control(paths[idx].get_target(9, screen))
@@ -238,8 +239,10 @@ async def run_game():
 
         #get the latest telemetry frame
         if not game_interface.frames.empty():
-            game_interface.update_setpoint(position=ships[0].x, velocity=ships[0].velocity, torque= 0.0)
+            target_position = paths[1].get_target(9, screen)
+            game_interface.update_setpoint(position=target_position, velocity=ships[0].velocity, torque= 0.0)
             latest_frame: TelemetryFrame = game_interface.frames.get_nowait()
+            right_ship.x = latest_frame.position - right_ship.width//2
             print(f'frame #: {game_interface.frame_count}, frame: {latest_frame}')
 
         # Limit frames per second
