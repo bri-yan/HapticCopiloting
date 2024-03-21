@@ -13,16 +13,20 @@
 /******************************************************************************/
 
 //need to import controller config struct definition
-#include "app/control/twid_control.h"
+#include "app/control/control_types.h"
+
+#include <FreeRTOSConfig.h>
 
 /******************************************************************************/
 /*                               D E F I N E S                                */
 /******************************************************************************/
 
 //command and telemetry config
+#define ENABLE_DEBUG_TELEMETRY_ON_INIT true
 #define TELEMETRY_QUEUE_SIZE 500U
 #define COMMAND_QUEUE_SIZE 10U
 #define TELEMETRY_SAMPLES_PER_LOOP 20U
+#define GAME_TELEMETRY_WAIT_MS 20U
 
 //hardware config
 //encoder
@@ -31,13 +35,18 @@
 #define ENCODER_CPR 500
 
 //serial port
-#define UART_BAUD_RATE 500000U
+#define UART_BAUD_RATE 1000000U
 
 //motor
-#define MOTOR_MAX_SPEED_DEGS 60945.5207
+#define MOTOR_MAX_SPEED_DEGS 100000
 #define MOTOR_PWM_FREQ 32000U
 #define MOTOR_DUTY_CYCLE_RES_BITS 10U
 #define MOTOR_DUTY_CYCLE_RES 1024
+
+//motor fix
+#define ENABLE_OUTPUT_SIGNAL_CORRECTION true //IF ENABLED, CONTROLLER WILL ALWAYS START AT 527 OR -527 DC
+#define OUTPUT_SIGNAL_CORRECTION_VALUE 527
+#define OUTPUT_SIGNAL_CORRECTION_THRESHOLD 5 //ERROR FROM SETPOINT
 
 //macro for struct (partial) init to fill out default controller parameters
 //CHANGE CONTROLLER DEFAULT CONFIG HERE!!!!
@@ -55,5 +64,16 @@
     .output_hlim = MOTOR_DUTY_CYCLE_RES, .output_llim = -MOTOR_DUTY_CYCLE_RES\
 }
 
+//freertos config
+#define CORE_CONTROL_TASK 1U
+#define CORE_SENSOR_TASK 1U
+#define CORE_SERIAL_READ_TASK 0U
+#define CORE_SERIAL_WRITE_TASK 0U
+
+#define TASK_PRIORITY_CONTROL (configMAX_PRIORITIES - 1)
+#define TASK_PRIORITY_TELEMETRY (configMAX_PRIORITIES - 1)
+#define TASK_PRIORITY_GAME_SEND (configMAX_PRIORITIES - 1)
+#define TASK_PRIORITY_COMMAND (configMAX_PRIORITIES)
+#define TASK_PRIORITY_SENSOR (configMAX_PRIORITIES)
 
 #endif // TWID32_CONFIG_H_

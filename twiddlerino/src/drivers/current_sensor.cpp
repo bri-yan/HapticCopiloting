@@ -12,6 +12,8 @@
 //library header
 #include "drivers/current_sensor.h"
 
+#include "app/twid32_config.h"
+
 //ads drivers
 #include "Adafruit_ADS1X15.h"
 #include "SPI.h"
@@ -75,9 +77,9 @@ void current_sensor_init() {
     ,  "Current_Sensor_Read_Task"
     ,  8192
     ,  NULL
-    ,  configMAX_PRIORITIES
+    ,  TASK_PRIORITY_SENSOR
     ,  &xCurrentSensTask
-    ,  1
+    ,  CORE_SENSOR_TASK
   );
 }
 

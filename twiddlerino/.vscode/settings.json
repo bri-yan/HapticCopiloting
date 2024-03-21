@@ -1,9 +1,0 @@
-{
-    "files.associations": {
-        "unity.h": "c",
-        "comms.h": "c",
-        "arduino.h": "c",
-        "twid_control.h": "c",
-        "ewma_filter.h": "c"
-    }
-}

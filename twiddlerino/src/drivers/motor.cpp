@@ -136,6 +136,16 @@ motor_state_t motor_set_state(motor_state_t state)
    return motor_state;
 }
 
+void motor_safety_check(double speed) {
+    if(speed > MOTOR_MAX_SPEED_DEGS || speed < -MOTOR_MAX_SPEED_DEGS) {
+        motor_set_pwm(0);
+        motor_set_state(motor_state_t::MOTOR_LOW);
+        Serial.printf("Motor speed is too fast! %lf deg/s", speed);
+        esp_system_abort("Aborting! Motor speed is too fast!");
+    }
+}
+
+
 /******************************************************************************/
 /*                      P R I V A T E  F U N C T I O N S                      */
 /******************************************************************************/
