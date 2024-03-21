@@ -7,6 +7,7 @@ import asyncio
 import serial_asyncio
 
 from dataclasses import dataclass
+import dataclasses
 
 import queue
 
@@ -15,13 +16,29 @@ import queue
 class TelemetryFrame:
     """
     Telemetry frame received from the esp32
+
+    Telemetry frame formatting: "/*<ID>,%lu,%lu,%lu,%lu,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf*/\n", 
+    t.timestamp_ms, t.loop_dt, t.control_dt, t.read_dt, 
+    t.pwm_duty_cycle, t.pwm_frequency, 
+    t.position, t.velocity, t.filtered_velocity, t.current, t.filtered_current, t.torque_external, t.torque_control, t.torque_net,
+    t.setpoint.pos, t.setpoint.vel, t.setpoint.accel, t.setpoint.torque,
+    t.Kp, t.Ki, t.Kd, t.impedance.K, t.impedance.B, t.impedance.J
     """
     timestamp_ms:int=0
+    loop_dt:int=0
+    control_dt:int=0
+    read_dt:int=0
+
+    #motor signal state
+    pwm_duty_cycle:float=0
+    pwm_frequency:float=0
 
     #state based on sensors
     position:float=0
     velocity:float=0
+    filtered_velocity:float=0
     current:float=0
+    filtered_current:float=0
     torque_external:float=0
     torque_control:float=0
     torque_net:float=0
@@ -36,12 +53,14 @@ class TelemetryFrame:
     Kp:float=0
     Ki:float=0
     Kd:float=0
+
+    #impedance params
     impedance_K:float=0
     impedance_B:float=0
     impedance_J:float=0
 
 #serial async protocol for interfacing with the twiddlerino
-class GameInterfaceProtocol(asyncio.Protocol):
+class TwidSerialInterfaceProtocol(asyncio.Protocol):
     """
     Vritual Enviornment Serial Protocol based on asyncio for async serial.
     Features:
@@ -53,6 +72,7 @@ class GameInterfaceProtocol(asyncio.Protocol):
     frames:queue.Queue = queue.Queue(1000)
     buffer:bytes = b''
     transport:serial_asyncio.SerialTransport
+    datafields:list[str] = [field.name for field in dataclasses.fields(TelemetryFrame)]
 
     def connection_made(self, transport) -> None:
         self.frames = queue.Queue(1000)
@@ -87,7 +107,7 @@ class GameInterfaceProtocol(asyncio.Protocol):
                 except Exception as errmsg:
                     print(errmsg)
                 #add any remaining bytes to buffer
-                self.buffer = b''.join(spl[1:-1])
+                self.buffer = b',' + b','.join(spl[1:-1])
             else:
                 #add to buffer since incomplete
                 self.buffer = data
@@ -121,10 +141,10 @@ class GameInterfaceProtocol(asyncio.Protocol):
         self.transport.write(bytes(f'set_mode,position,\n',"utf-8"))
         self.transport.write(bytes(f'set_pid,5.0,0.0,0.0,\n',"utf-8"))
         
-    def bytes2frame(self, data:bytes) -> TelemetryFrame :
+    def formattedbytes2frame(self, data:bytes) -> TelemetryFrame :
         spl = data.decode("utf-8").split(',')
         # print(spl, len(spl))
-        if len(spl) != 19:
+        if len(spl) != 25:
             raise Exception(f'cannot convert bytes to telemetry frame! len: {len(spl)}')
         t = TelemetryFrame()
         for item in spl[1:-1]:
@@ -132,4 +152,16 @@ class GameInterfaceProtocol(asyncio.Protocol):
             name = spl2[0]
             val = float(spl2[1])
             setattr(t,name,val)
+        return t
+
+    def bytes2frame(self, data:bytes) -> TelemetryFrame :
+        spl = data.decode("utf-8").split(',')
+        # print(spl, len(spl))
+        if len(spl) != 19:
+            raise Exception(f'cannot convert bytes to telemetry frame! len: {len(spl)}')
+        t = TelemetryFrame()
+        count: int = 0
+        for item in spl[1:-1]:
+            setattr(t,self.datafields[count],float(item))
+            count+=1
         return t

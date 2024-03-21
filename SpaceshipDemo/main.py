@@ -8,11 +8,11 @@ import pygame
 
 import asyncio
 import serial_asyncio
-from game_interface import GameInterfaceProtocol, TelemetryFrame
+from SpaceshipDemo.serial_interface import TwidSerialInterfaceProtocol, TelemetryFrame
 
 from game_objects import Asteroid, EnemyProjectile, EnemyShip, PlayerShip, Path
 
-game_interface: GameInterfaceProtocol
+game_interface: TwidSerialInterfaceProtocol
 
 ###SERIAL CONFIGURATION for esp32
 SERIAL_PORT = 'COM4'
@@ -41,7 +41,7 @@ class AsyncClock:
 
 async def run_game():
     global game_interface, loop
-    transport, game_interface = await serial_asyncio.create_serial_connection(loop, GameInterfaceProtocol, SERIAL_PORT, baudrate=SERIAL_BAUD_RATE)
+    transport, game_interface = await serial_asyncio.create_serial_connection(loop, TwidSerialInterfaceProtocol, SERIAL_PORT, baudrate=SERIAL_BAUD_RATE)
     await asyncio.sleep(0.5) #wait for connection to init
 
     # Colors
