@@ -109,7 +109,7 @@ void twiddlerino_setup(startup_type_t startup_type) {
   Serial.printf("Parameter Update Task Initialized. Waiting for param update commands. Task Status: %i\n",eTaskGetState(xCommandTask));
 
   //initialize game serial interface
-  game_interface_init();
+  // game_interface_init();
 
   //start telemetry on core 0
   xTaskCreatePinnedToCore(
@@ -152,7 +152,6 @@ void TaskPublishTelemetry(void *pvParameters) {
   for(;;) 
   {
     if(enable_debug_telemetry && Serial.availableForWrite() && (xQueueReceive(xQueueTelemetry, &t, 20) == pdTRUE)){
-      // publish_telemetry(&t);
       publish_telemetry_serial_studio(&t);
     }
     vTaskDelay( 1 );

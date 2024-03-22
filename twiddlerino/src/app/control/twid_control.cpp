@@ -55,7 +55,8 @@ static setpoint_t setpoint = {.pos = 0.0, .vel =0.0, .accel = 0.0, .torque = 0.0
 static uint32_t last_time = 0; //last loop timestamp us
 static uint32_t start_time = 0; //start timestamp us
 static uint32_t telem_dt = 0; //telemetry code delta time in us
-static uint32_t itr = 0; //loop iterations
+static uint32_t itr = 0; //loop 
+static double last_pos = 0;
 static telemetry_t telem;
 static EwmaFilter velocity_filt_ewa(controller_config.velocity_filter_const, 0.0);
 static EwmaFilter current_filt_ewa(controller_config.current_filter_const, 0.0);
@@ -79,6 +80,7 @@ void tcontrol_cfg(controller_config_t* config) {
     last_time = 0;
     start_time = 0;
     telem_dt = 0;
+    last_pos = 0;
     itr = 0;
     velocity_filt_ewa = EwmaFilter(controller_config.velocity_filter_const, 0.0);
     current_filt_ewa = EwmaFilter(controller_config.current_filter_const, 0.0);
@@ -184,7 +186,9 @@ static void pid_callback(void *args)
     telem.filtered_current = current_filt_ewa(telem.current);
 
     //read and filter velocity
-    telem.velocity = encoder_get_velocity();
+    // telem.velocity = encoder_get_velocity();
+    telem.velocity = ((telem.position - last_pos)/(controller_config.sample_time_us*1e-6))*0.1666667;
+    last_pos = telem.position;
 
     motor_safety_check(telem.velocity);
 

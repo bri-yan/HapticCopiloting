@@ -68,6 +68,7 @@ class TwidSerialInterfaceProtocol(asyncio.Protocol):
         Functions avaialable to update config /control targers  on esp32 such as setpoint, and gains.
     """
     frame_count:int = 0
+    err_frame_count:int = 0
     last_frame:TelemetryFrame = None
     frames:queue.Queue = queue.Queue(1000)
     buffer:bytes = b''
@@ -77,6 +78,7 @@ class TwidSerialInterfaceProtocol(asyncio.Protocol):
     def connection_made(self, transport) -> None:
         self.frames = queue.Queue(1000)
         self.frame_count = 0
+        self.err_frame_count = 0
         self.buffer = b''
         self.transport = transport
         self.transport.write(b'telemetry_disable\n')
@@ -106,6 +108,7 @@ class TwidSerialInterfaceProtocol(asyncio.Protocol):
                     self.frame_count+=1
                 except Exception as errmsg:
                     print(errmsg)
+                    self.err_frame_count+=1
                 #add any remaining bytes to buffer
                 self.buffer = b',' + b','.join(spl[1:-1])
             else:
@@ -127,7 +130,7 @@ class TwidSerialInterfaceProtocol(asyncio.Protocol):
         self.transport.write(data)
     
     def update_setpoint(self, position:float=0, velocity:float=0, accel:float=0, torque:float=0) -> None:
-        self.transport.write(bytes(f'game_set_setpoint,{position},{velocity},{accel},{torque},\n',"utf-8"))
+        self.transport.write(bytes(f'set_setpoint,{position},{velocity},{accel},{torque},\n',"utf-8"))
 
     def update_impedance(self, K :float=0, B :float=0, J :float= 0) -> None:
         self.transport.write(bytes(f'set_impedance,{K},{B},{J},\n',"utf-8"))
