@@ -1,6 +1,7 @@
 import random
 import sys
 import time
+import datetime
 from collections import deque
 
 import numpy as np
@@ -33,12 +34,13 @@ async def run_test():
         print(dc[-1],current[-1])
     twid.update_pwm(0)
 
-    print('dc')
-    for val in dc:
-        print(val,',')
-    print('current')
-    for val in current:
-        print(val,',')
+    with open(f'{datetime.time.__repr__()}_motor_current_calibration_table.txt', "w") as f:
+        f.write('duty cycle (0-1024)\n')
+        for val in dc:
+            f.write(f'{val},\n')
+        f.write('current (A)\n')
+        for val in current:
+            f.write(f'{val},\n')
 
 twid: TwidSerialInterfaceProtocol
 loop = asyncio.get_event_loop()
