@@ -25,7 +25,7 @@
 #define ENABLE_DEBUG_TELEMETRY_ON_INIT true
 #define TELEMETRY_QUEUE_SIZE 500U
 #define COMMAND_QUEUE_SIZE 10U
-#define TELEMETRY_SAMPLES_PER_LOOP 20U
+#define TELEMETRY_DEFAULT_SAMPLE_RATE 20U //telemetry sample rate in (control loops)/sample
 #define GAME_TELEMETRY_WAIT_MS 20U
 
 //hardware config
@@ -61,7 +61,8 @@
     .current_filter_const = 0.1,\
     .motor_Kv = 0.025, .motor_Ke = 0.011, .motor_J = 1e-6,\
     .impedance = {.K = 1e-3, .B = 0.01, .J = 1e-6},\
-    .output_hlim = MOTOR_DUTY_CYCLE_RES, .output_llim = -MOTOR_DUTY_CYCLE_RES\
+    .output_hlim = MOTOR_DUTY_CYCLE_RES, .output_llim = -MOTOR_DUTY_CYCLE_RES,\
+    .telemetry_sample_rate = TELEMETRY_DEFAULT_SAMPLE_RATE,\
 }
 
 //freertos config

@@ -26,9 +26,6 @@
 #include "comms.h"
 #include "app/control/twid_control.h"
 
-//virtual environment interface
-#include "app/virtual_environment/virtual_environment.h"
-
 //arduino
 #include "Arduino.h"
 
@@ -107,9 +104,6 @@ void twiddlerino_setup(startup_type_t startup_type) {
     , CORE_SERIAL_READ_TASK
   );
   Serial.printf("Parameter Update Task Initialized. Waiting for param update commands. Task Status: %i\n",eTaskGetState(xCommandTask));
-
-  //initialize game serial interface
-  // game_interface_init();
 
   //start telemetry on core 0
   xTaskCreatePinnedToCore(
@@ -197,9 +191,7 @@ void TaskReadTCommands(void *pvParameters) {
       //for logging purposes
       Serial.printf("Received data: %s\n", read_string);
 
-      if(read_string.substring(0,4) == "game") {
-        game_process_command(&read_string);
-      } else if(read_string == "STOP" || read_string == "stop"){
+     if(read_string == "STOP" || read_string == "stop"){
         tcontrol_stop();
 
       } else if(read_string == "RESET" || read_string == "reset"){

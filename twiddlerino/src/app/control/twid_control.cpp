@@ -22,6 +22,9 @@
 //filters
 #include "app/filter/ewma_filter.h"
 
+//calibration
+#include "app/calibration/motor_lut.h"
+
 //comms
 #include "app/comms.h"
 
@@ -31,6 +34,8 @@
 
 #define _ENTER_CRITICAL() portENTER_CRITICAL_SAFE(&spinlock)
 #define _EXIT_CRITICAL() portEXIT_CRITICAL_SAFE(&spinlock)
+
+#define DEGS_TO_RPM 0.1666667
 
 /******************************************************************************/
 /*                              T Y P E D E F S                               */
@@ -187,7 +192,7 @@ static void pid_callback(void *args)
 
     //read and filter velocity
     // telem.velocity = encoder_get_velocity();
-    telem.velocity = ((telem.position - last_pos)/(controller_config.sample_time_us*1e-6))*0.1666667;
+    telem.velocity = ((telem.position - last_pos)/(controller_config.sample_time_us*1e-6)) * DEGS_TO_RPM;
     last_pos = telem.position;
 
     motor_safety_check(telem.velocity);
@@ -196,7 +201,10 @@ static void pid_callback(void *args)
 
     //calculate torque
     telem.torque_net = controller_config.motor_Ke * telem.filtered_current;
-    telem.torque_control = controller_config.motor_Kv * telem.filtered_velocity;
+    telem.torque_control = controller_config.motor_Ke * lookup_exp_current((double)motor_get_duty_cycle()); //controller_config.motor_Kv * telem.filtered_velocity;
+    if (motor_get_state() == motor_state_t::MOTOR_DRIVE_CCW) {
+        telem.torque_control *= -1;
+    }
     telem.torque_external = telem.torque_net - telem.torque_control;
 
     telem.read_dt = micros() - telem.read_dt;
@@ -262,10 +270,10 @@ static void pid_callback(void *args)
 
     //apply control signal
     if(controller_config.control_type != control_type_t::NO_CTRL) {
-        telem.pwm_duty_cycle = motor_set_pwm(output_signal);
-    } else {
-        telem.pwm_duty_cycle = (double)motor_get_duty_cycle();
+        motor_set_pwm(output_signal);
     }
+    telem.pwm_duty_cycle = (double)motor_get_duty_cycle();
+
     telem.pwm_frequency = motor_get_frequency();
     telem.control_dt = micros() - telem.control_dt;
 
@@ -278,7 +286,7 @@ static void pid_callback(void *args)
     telem.Kd = controller_config.Kd;
     telem.impedance = controller_config.impedance;
 
-    if((itr % TELEMETRY_SAMPLES_PER_LOOP) == 0 && controller_config.telem_queue_handle != NULL) {
+    if((itr % controller_config.telemetry_sample_rate) == 0 && controller_config.telem_queue_handle != NULL) {
         BaseType_t xHigherPriorityTaskWoken = pdFALSE;
         xQueueSendFromISR(*controller_config.telem_queue_handle, &telem, &xHigherPriorityTaskWoken);
     }
