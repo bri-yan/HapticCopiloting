@@ -108,6 +108,7 @@ typedef struct {
 
     //other
     bool pid_success_flag;
+    uint32_t nframes_sent_queue;
 } telemetry_t;
 
 /**

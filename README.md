@@ -60,3 +60,5 @@ Several commands are available to set parameters over the serial interface and t
 `"set_setpoint,<double>,<double>,<double>,<double>,\n"` - Set position, velocity, acceleration and torque setpoints for the controller. 
 
 `"set_dutycycle,<int>,\n"` - Sets motor duty cycle directly regardless of controller running.
+
+`"set_telemsamplerate,<uint>,\n"` - Set telemetry sample rate in terms of (# control loops)/sample. I.e. how many control loops to wait before sending telemetry to serial queue.

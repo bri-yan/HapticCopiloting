@@ -24,6 +24,6 @@
  *        If duty cycle is out of range MOTOR_DUTY_CYCLE_RES, will return max current
  * 
  */
-float lookup_exp_current(float dc);
+double lookup_exp_current(double dc);
 
 #endif //MOTOR_LUT_H_

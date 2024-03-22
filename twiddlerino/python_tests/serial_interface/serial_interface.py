@@ -17,12 +17,12 @@ class TelemetryFrame:
     """
     Telemetry frame received from the esp32
 
-    Telemetry frame formatting: "/*<ID>,%lu,%lu,%lu,%lu,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf*/\n", 
+    Telemetry frame formatting: "/*<ID>,%lu,%lu,%lu,%lu,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lu,%lu*/\n", 
     t.timestamp_ms, t.loop_dt, t.control_dt, t.read_dt, 
     t.pwm_duty_cycle, t.pwm_frequency, 
     t.position, t.velocity, t.filtered_velocity, t.current, t.filtered_current, t.torque_external, t.torque_control, t.torque_net,
     t.setpoint.pos, t.setpoint.vel, t.setpoint.accel, t.setpoint.torque,
-    t.Kp, t.Ki, t.Kd, t.impedance.K, t.impedance.B, t.impedance.J
+    t.Kp, t.Ki, t.Kd, t.impedance.K, t.impedance.B, t.impedance.J, t.nframes_sent_queue, nframes_sent_serial
     """
     timestamp_ms:int=0
     loop_dt:int=0
@@ -58,9 +58,14 @@ class TelemetryFrame:
     impedance_K:float=0
     impedance_B:float=0
     impedance_J:float=0
+    
+    #telemetry counts
+    nframes_sent_queue:int=0
+    nframes_sent_serial:int=0
 
 #serial async protocol for interfacing with the twiddlerino
 class TwidSerialInterfaceProtocol(asyncio.Protocol):
+    
     """
     Vritual Enviornment Serial Protocol based on asyncio for async serial.
     Features:
@@ -90,29 +95,33 @@ class TwidSerialInterfaceProtocol(asyncio.Protocol):
         self.buffer = b''
 
         #check if we are at start of frame
-        if data[0:2] == b'/*':
-            #check if we are at end of frame
+        if b'/*' in data:
             if b'*/' in data:
                 #extract complete frame
-                spl = data.split(b'*/')
-                if(self.frames.full()):
-                    try:
-                        self.frames.get_nowait()
-                    except:
-                        pass
-                try:
-                    frame = self.bytes2frame(spl[0])
-                    self.frames.put(frame)
-                    self.last_frame = frame
-                    self.frame_count+=1
-                except Exception as errmsg:
-                    print(errmsg)
-                    self.err_frame_count+=1
-                #add any remaining bytes to buffer
-                self.buffer = b',' + b','.join(spl[1:-1])
+                spl = data.split(b'/*')
+                for seg in spl:
+                    #check if we are at end of frame
+                    if seg == b'':
+                        continue
+                    elif b'*/' not in seg:
+                        if seg == spl[0]:
+                            self.buffer += seg
+                        else:
+                            self.buffer += b'/*' + seg
+                    else:
+                        try:
+                            frame = self.bytes2frame(seg.split(b'*/')[0])
+                            if self.frames.full():
+                                self.frames.get_nowait()
+                            self.frames.put(frame)
+                            self.last_frame = frame
+                            self.frame_count+=1
+                        except Exception as errmsg:
+                            print(errmsg)
+                            self.err_frame_count+=1
             else:
                 #add to buffer since incomplete
-                self.buffer = data
+                self.buffer += data
 
     def pause_reading(self) -> None:
         # This will stop the callbacks to data_received
@@ -160,6 +169,9 @@ class TwidSerialInterfaceProtocol(asyncio.Protocol):
         elif duty_cycle > 1024:
             duty_cycle = 1024
         self.transport.write(bytes(f'set_dutycycle,{duty_cycle},\n',"utf-8"))
+    
+    def update_telem_sample_rate(self, rate:int=20) -> None:
+        self.transport.write(bytes(f'set_telemsamplerate,{rate},\n',"utf-8"))
         
     def formattedbytes2frame(self, data:bytes) -> TelemetryFrame :
         spl = data.decode("utf-8").split(',')
@@ -177,11 +189,11 @@ class TwidSerialInterfaceProtocol(asyncio.Protocol):
     def bytes2frame(self, data:bytes) -> TelemetryFrame :
         spl = data.decode("utf-8").split(',')
         # print(spl, len(spl))
-        if len(spl) != 25:
+        if len(spl) != 27:
             raise Exception(f'cannot convert bytes to telemetry frame! len: {len(spl)}')
         t = TelemetryFrame()
         count: int = 0
-        for item in spl[1:-1]:
+        for item in spl[1:]:
             setattr(t,self.datafields[count],float(item))
             count+=1
         return t

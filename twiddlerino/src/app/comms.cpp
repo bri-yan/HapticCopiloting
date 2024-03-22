@@ -42,6 +42,7 @@ static char timed_read();
 /*               P R I V A T E  G L O B A L  V A R I A B L E S                */
 /******************************************************************************/
 
+static uint32_t nframes_sent_serial = 0;
 
 
 /******************************************************************************/
@@ -56,7 +57,7 @@ bool decode_config_cmd(String *str, controller_config_t *cfg) {
         cfg->Ki = vals[1];
         cfg->Kd = vals[2];
         return true;
-    } else if(str->substring(0,14).compareTo("set_impedance") == 0) {
+    } else if(str->substring(0,13).compareTo("set_impedance") == 0) {
         double vals[3] = {0.0,0.0,0.0};
         extract_doubles(str, vals, 3);
         cfg->impedance.K = vals[0];
@@ -88,6 +89,13 @@ bool decode_config_cmd(String *str, controller_config_t *cfg) {
 
         cfg->control_type = mode;
         return true;
+    } else if(str->substring(0,19) == "set_telemsamplerate") {
+        double vals[1] = {0.0};
+        extract_doubles(str, vals, 1);
+        if (vals[0] >= 1) {
+            cfg->telemetry_sample_rate = (uint32_t)vals[0];
+            return true;
+        }
     }
 
     return false;
@@ -112,12 +120,13 @@ uint32_t publish_telemetry_serial_studio(telemetry_t *telem) {
     uint32_t size = 0;
     telemetry_t t = *telem;
     if(Serial) {
-        size = Serial.printf("/*TWIDDLERINO_TELEMETRY,%lu,%lu,%lu,%lu,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf*/\n", 
+        nframes_sent_serial+=1;
+        size = Serial.printf("/*TWIDDLERINO_TELEMETRY,%lu,%lu,%lu,%lu,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lu,%lu*/\n", 
             t.timestamp_ms, t.loop_dt, t.control_dt, t.read_dt, 
             t.pwm_duty_cycle, t.pwm_frequency, 
             t.position, t.velocity, t.filtered_velocity, t.current, t.filtered_current, t.torque_external, t.torque_control, t.torque_net,
             t.setpoint.pos, t.setpoint.vel, t.setpoint.accel, t.setpoint.torque,
-            t.Kp, t.Ki, t.Kd, t.impedance.K, t.impedance.B, t.impedance.J);
+            t.Kp, t.Ki, t.Kd, t.impedance.K, t.impedance.B, t.impedance.J, t.nframes_sent_queue, nframes_sent_serial);
     }
     return size;
 }

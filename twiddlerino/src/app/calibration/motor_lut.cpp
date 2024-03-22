@@ -1,5 +1,5 @@
 /**
- * @file motor_lut.h
+ * @file motor_lut.cpp
  * @brief Motor calibration look up tables
  * @author Yousif El-Wishahy (ywishahy@student.ubc.ca)
  */
@@ -19,16 +19,6 @@
 /******************************************************************************/
 
 #define LUT_LENGTH 100U
-
-/******************************************************************************/
-/*                              T Y P E D E F S                               */
-/******************************************************************************/
-
-/******************************************************************************/
-/*            P R I V A T E  F U N C T I O N  P R O T O T Y P E S             */
-/******************************************************************************/
-
-static float interpolate_1d(float dc);
 
 /******************************************************************************/
 /*               P R I V A T E  G L O B A L  V A R I A B L E S                */
@@ -246,17 +236,13 @@ static float lut_current[100] = {
 /*                       P U B L I C  F U N C T I O N S                       */
 /******************************************************************************/
 
-/******************************************************************************/
-/*                      P R I V A T E  F U N C T I O N S                      */
-/******************************************************************************/
-
-//linear interpolation
-//https://stackoverflow.com/questions/7091294/how-to-build-a-lookup-table-in-c-sdcc-compiler-with-linear-interpolation
-static float interpolate_1d(float dc) {
+double lookup_exp_current(double dc) {
     if (dc > MOTOR_DUTY_CYCLE_RES || dc < -MOTOR_DUTY_CYCLE_RES) {
         return lut_current[LUT_LENGTH-1];
     }
 
+    //linear interpolation
+    //https://stackoverflow.com/questions/7091294/how-to-build-a-lookup-table-in-c-sdcc-compiler-with-linear-interpolation
     for(uint16_t i = 0; i < LUT_LENGTH-1; i++ )
     {
         if ( lut_dc[i] <= dc && lut_dc[i+1] >= dc )

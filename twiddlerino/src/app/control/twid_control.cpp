@@ -91,6 +91,7 @@ void tcontrol_cfg(controller_config_t* config) {
     current_filt_ewa = EwmaFilter(controller_config.current_filter_const, 0.0);
     pid_controller = DiscretePID(&controller_config);
     telem.current_sps = current_sensor_sps();
+    telem.nframes_sent_queue = 0;
 
     const esp_timer_create_args_t timer_args = {
         .callback = pid_callback,
@@ -168,6 +169,7 @@ void tcontrol_update_cfg(controller_config_t* cfg) {
     controller_config.impedance.J = cfg->impedance.J;
     controller_config.impedance.B = cfg->impedance.B;
     controller_config.control_type = cfg->control_type;
+    controller_config.telemetry_sample_rate = cfg->telemetry_sample_rate;
     pid_controller.set_all_params(&controller_config);
     _EXIT_CRITICAL();
 }
@@ -288,6 +290,7 @@ static void pid_callback(void *args)
 
     if((itr % controller_config.telemetry_sample_rate) == 0 && controller_config.telem_queue_handle != NULL) {
         BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+        telem.nframes_sent_queue+=1;
         xQueueSendFromISR(*controller_config.telem_queue_handle, &telem, &xHigherPriorityTaskWoken);
     }
     itr++;
