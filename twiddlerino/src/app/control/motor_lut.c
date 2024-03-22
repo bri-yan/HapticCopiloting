@@ -1,4 +1,3 @@
-#include "Arduino.h"
 
 static float lut_dc[100] = {
 0.0 ,
