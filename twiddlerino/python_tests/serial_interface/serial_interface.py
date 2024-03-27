@@ -15,7 +15,7 @@ import queue
 import socket
 
 SERIAL_STUDIO_HOST = '127.0.0.1'
-SERIAL_STUDIO_PORT = '15555'
+SERIAL_STUDIO_PORT = 15555
 
 @dataclass
 class TelemetryFrame:
@@ -85,11 +85,17 @@ class TwidSerialInterfaceProtocol(asyncio.Protocol):
     transport:serial_asyncio.SerialTransport
     datafields:list[str] = [field.name for field in dataclasses.fields(TelemetryFrame)]
     socket_buffer:queue.Queue = queue.Queue(1000)
+    _instance = None
+
+    def __init__(self):
+        super(TwidSerialInterfaceProtocol, self).__init__()
+        TwidSerialInterfaceProtocol._instance = self
 
     def connection_made(self, transport) -> None:
         self.frames = queue.Queue(1000)
         self.frame_count = 0
         self.err_frame_count = 0
+        self.start_sent_count = 0
         self.buffer = b''
         self.socket_buffer:queue.Queue = queue.Queue(1000)
         self.transport = transport
@@ -130,6 +136,9 @@ class TwidSerialInterfaceProtocol(asyncio.Protocol):
                             self.frames.put(frame)
                             self.last_frame = frame
                             self.frame_count+=1
+                            if self.frame_count == 1:
+                                self.start_sent_count = frame.nframes_sent_serial
+
                         except Exception as errmsg:
                             print(errmsg)
                             self.err_frame_count+=1
@@ -211,3 +220,33 @@ class TwidSerialInterfaceProtocol(asyncio.Protocol):
             setattr(t,self.datafields[count],float(item))
             count+=1
         return t
+
+async def run_socket_server(delay=0.01):
+    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server.bind((SERIAL_STUDIO_HOST, SERIAL_STUDIO_PORT))
+    server.listen(1)
+    server.setblocking(False)
+    loop = asyncio.get_event_loop()
+
+    client, _ = await loop.sock_accept(server)
+    print(f'Socket connection established on {client.getsockname()}')
+    twid = None
+
+    while True:
+        if twid is None:
+            if TwidSerialInterfaceProtocol._instance is None:
+                raise(f'Cannot grab instance of {TwidSerialInterfaceProtocol.__name__}')
+            twid = TwidSerialInterfaceProtocol._instance
+
+        if not twid.socket_buffer.empty():
+            data = twid.socket_buffer.get()
+            try:
+                await loop.sock_sendall(client, data)
+            except Exception as errmsg:
+                print(errmsg)
+                client.close()
+                print('Waiting to accept new socket connection.')
+                client, _ = await loop.sock_accept(server)
+                print(f'Socket connection re-established on {client.getsockname()}')
+
+        await asyncio.sleep(delay)
