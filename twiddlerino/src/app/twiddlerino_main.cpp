@@ -192,11 +192,11 @@ void TaskReadTCommands(void *pvParameters) {
       Serial.printf("Received data: %s\n", read_string);
 
      if(read_string == "STOP" || read_string == "stop"){
+        motor_fast_stop();
         tcontrol_stop();
-
       } else if(read_string == "RESET" || read_string == "reset"){
+        motor_fast_stop();
         tcontrol_reset();
-
       } else if(read_string == "telemetry_enable") {
         enable_debug_telemetry = true;
       } else if(read_string == "telemetry_disable") {
