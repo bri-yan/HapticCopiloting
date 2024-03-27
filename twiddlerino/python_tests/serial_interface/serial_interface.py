@@ -1,5 +1,6 @@
 # game_interface.py v0.3
 #   A python serial based protocol with an esp32 for a haptic virtual environment
+#   Also shares telemetry data over tcp socket - this can be accessed by other GUI software such as serial studio
 # Author: Yousif El-Wishahy (ywishahy@student.ubc.ca)
 
 #import async for and serial_asycnc for protocol
@@ -11,6 +12,10 @@ import dataclasses
 
 import queue
 
+import socket
+
+SERIAL_STUDIO_HOST = '127.0.0.1'
+SERIAL_STUDIO_PORT = '15555'
 
 @dataclass
 class TelemetryFrame:
@@ -79,17 +84,26 @@ class TwidSerialInterfaceProtocol(asyncio.Protocol):
     buffer:bytes = b''
     transport:serial_asyncio.SerialTransport
     datafields:list[str] = [field.name for field in dataclasses.fields(TelemetryFrame)]
+    socket_buffer:queue.Queue = queue.Queue(1000)
 
     def connection_made(self, transport) -> None:
         self.frames = queue.Queue(1000)
         self.frame_count = 0
         self.err_frame_count = 0
         self.buffer = b''
+        self.socket_buffer:queue.Queue = queue.Queue(1000)
         self.transport = transport
         self.transport.resume_reading()
         print('port opened', transport)
 
     def data_received(self, data) -> None:
+        if self.socket_buffer.full():
+            try:
+                self.socket_buffer.get_nowait()
+            except Exception as errmsg:
+                print(errmsg)
+        self.socket_buffer.put(data)
+
         #add buffer (it could be empty)
         data = self.buffer + data
         self.buffer = b''
