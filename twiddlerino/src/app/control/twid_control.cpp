@@ -262,13 +262,13 @@ static void pid_callback(void *args)
     output_signal = pid_controller.compute(feedback_signal, setpoint_signal);
     telem.error = pid_controller.get_error();
 
-    if(ENABLE_OUTPUT_SIGNAL_CORRECTION) {
-        if (telem.error > OUTPUT_SIGNAL_CORRECTION_THRESHOLD) {
-            output_signal += OUTPUT_SIGNAL_CORRECTION_VALUE;
-        } else {
-            output_signal -= OUTPUT_SIGNAL_CORRECTION_VALUE;
-        }
-    }
+    // if(ENABLE_OUTPUT_SIGNAL_CORRECTION) {
+    //     if (telem.error > OUTPUT_SIGNAL_CORRECTION_THRESHOLD) {
+    //         output_signal += OUTPUT_SIGNAL_CORRECTION_VALUE;
+    //     } else {
+    //         output_signal -= OUTPUT_SIGNAL_CORRECTION_VALUE;
+    //     }
+    // }
 
     //apply control signal
     if(controller_config.control_type != control_type_t::NO_CTRL) {
