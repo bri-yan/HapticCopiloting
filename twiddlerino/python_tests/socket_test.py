@@ -7,7 +7,7 @@ import numpy as np
 
 import asyncio
 import serial_asyncio
-from serial_interface.serial_interface import TwidSerialInterfaceProtocol, TelemetryFrame, run_socket_server
+from serial_interface.serial_interface import TwidSerialInterfaceProtocol, TelemetryFrame, run_socket_server_async
 import socket
 
 ###SERIAL CONFIGURATION for esp32
@@ -31,6 +31,6 @@ async def run_test():
         await asyncio.sleep(0.01)
 
 loop = asyncio.get_event_loop()
-loop.run_until_complete(asyncio.gather(run_test(), run_socket_server()))
+loop.run_until_complete(asyncio.gather(run_test(), run_socket_server_async()))
 loop.close()
 

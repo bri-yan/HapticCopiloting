@@ -228,6 +228,10 @@ cmd_type_t decode_test_cmd(String * read_string, test_config_t *t) {
     return t->cmd_type;
 }
 
+void reset_sent_count() {
+    nframes_sent_serial = 0;
+}
+
 /******************************************************************************/
 /*                      P R I V A T E  F U N C T I O N S                      */
 /******************************************************************************/

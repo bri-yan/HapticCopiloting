@@ -196,7 +196,10 @@ void TaskReadTCommands(void *pvParameters) {
         tcontrol_stop();
       } else if(read_string == "RESET" || read_string == "reset"){
         motor_fast_stop();
+        reset_sent_count();
         tcontrol_reset();
+      } else if(read_string == "REBOOT" || read_string == "reboot"){
+        esp_restart();
       } else if(read_string == "telemetry_enable") {
         enable_debug_telemetry = true;
       } else if(read_string == "telemetry_disable") {

@@ -99,4 +99,6 @@ String read_string_until(char terminator);
 // extract doubles from string
 void extract_doubles(String *, double*, uint16_t);
 
+void reset_sent_count();
+
 #endif //COMMS_H_

@@ -95,7 +95,6 @@ class TwidSerialInterfaceProtocol(asyncio.Protocol):
         self.frames = queue.Queue(1000)
         self.frame_count = 0
         self.err_frame_count = 0
-        self.start_sent_count = 0
         self.buffer = b''
         self.socket_buffer:queue.Queue = queue.Queue(1000)
         self.transport = transport
@@ -131,14 +130,11 @@ class TwidSerialInterfaceProtocol(asyncio.Protocol):
                     else:
                         try:
                             frame = self.bytes2frame(seg.split(b'*/')[0])
+                            self.frame_count+=1
                             if self.frames.full():
                                 self.frames.get_nowait()
                             self.frames.put(frame)
                             self.last_frame = frame
-                            self.frame_count+=1
-                            if self.frame_count == 1:
-                                self.start_sent_count = frame.nframes_sent_serial
-
                         except Exception as errmsg:
                             print(errmsg)
                             self.err_frame_count+=1
@@ -159,6 +155,30 @@ class TwidSerialInterfaceProtocol(asyncio.Protocol):
         
     def write(self, data:bytes) -> None:
         self.transport.write(data)
+    
+    def bytes2frame(self, data:bytes) -> TelemetryFrame :
+        spl = data.decode("utf-8").split(',')
+        # print(spl, len(spl))
+        if len(spl) != 27:
+            raise Exception(f'cannot convert bytes to telemetry frame! len: {len(spl)}')
+        t = TelemetryFrame()
+        count: int = 0
+        for item in spl[1:]:
+            setattr(t,self.datafields[count],float(item))
+            count+=1
+        return t
+
+    def control_stop(self):
+        self.transport.write(bytes(f'stop\n',"utf-8"))
+    
+    def control_reset(self):
+        self.transport.write(bytes(f'reset\n',"utf-8"))
+
+    def esp32_reboot(self):
+        self.transport.write(bytes(f'reboot\n',"utf-8"))
+
+    def motor_stop(self):
+        self.transport.write(bytes(f'set_dutycycle,0,\n',"utf-8"))
     
     def update_setpoint(self, position:float=0, velocity:float=0, accel:float=0, torque:float=0) -> None:
         self.transport.write(bytes(f'set_setpoint,{position},{velocity},{accel},{torque},\n',"utf-8"))
@@ -187,41 +207,12 @@ class TwidSerialInterfaceProtocol(asyncio.Protocol):
         self.transport.write(bytes(f'set_mode,no_control,\n',"utf-8"))
 
     def update_pwm(self, duty_cycle:float = 0) -> None:
-        if duty_cycle < -1024:
-            duty_cycle = -1024
-        elif duty_cycle > 1024:
-            duty_cycle = 1024
         self.transport.write(bytes(f'set_dutycycle,{duty_cycle},\n',"utf-8"))
     
     def update_telem_sample_rate(self, rate:int=20) -> None:
         self.transport.write(bytes(f'set_telemsamplerate,{rate},\n',"utf-8"))
-        
-    def formattedbytes2frame(self, data:bytes) -> TelemetryFrame :
-        spl = data.decode("utf-8").split(',')
-        # print(spl, len(spl))
-        if len(spl) != 19:
-            raise Exception(f'cannot convert bytes to telemetry frame! len: {len(spl)}')
-        t = TelemetryFrame()
-        for item in spl[1:-1]:
-            spl2 = item.split(':')
-            name = spl2[0]
-            val = float(spl2[1])
-            setattr(t,name,val)
-        return t
 
-    def bytes2frame(self, data:bytes) -> TelemetryFrame :
-        spl = data.decode("utf-8").split(',')
-        # print(spl, len(spl))
-        if len(spl) != 27:
-            raise Exception(f'cannot convert bytes to telemetry frame! len: {len(spl)}')
-        t = TelemetryFrame()
-        count: int = 0
-        for item in spl[1:]:
-            setattr(t,self.datafields[count],float(item))
-            count+=1
-        return t
-
-async def run_socket_server(delay=0.01):
+async def run_socket_server_async(delay=0.01):
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server.bind((SERIAL_STUDIO_HOST, SERIAL_STUDIO_PORT))
     server.listen(1)
@@ -250,3 +241,33 @@ async def run_socket_server(delay=0.01):
                 print(f'Socket connection re-established on {client.getsockname()}')
 
         await asyncio.sleep(delay)
+
+def run_socket_server_thread(test_instance):
+    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server.bind((SERIAL_STUDIO_HOST, SERIAL_STUDIO_PORT))
+    server.listen()
+    twid:TwidSerialInterfaceProtocol = None
+
+    while twid is None:
+        try:
+            twid:TwidSerialInterfaceProtocol = test_instance.twid._instance
+        except Exception as errmsg:
+            pass
+    print(f'Grabbed instance of {TwidSerialInterfaceProtocol.__name__}')
+        
+    print('Waiting to accept new socket connection.')
+    client, _ = server.accept()
+    print(f'Socket connection re-established on {client.getsockname()}')
+
+    while not twid.transport.is_closing():
+        data = twid.socket_buffer.get()
+        try:
+            client.sendall(data)
+        except Exception as errmsg:
+            print(errmsg)
+            client.close()
+            print('Waiting to accept new socket connection.')
+            client, _ = server.accept()
+            print(f'Socket connection re-established on {client.getsockname()}')
+    print('Serial port closed.. closing serial studio socket now.')
+    client.close()
