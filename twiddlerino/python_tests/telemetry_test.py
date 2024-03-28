@@ -3,7 +3,6 @@ import time
 import asyncio
 from serial_interface.serial_interface import TelemetryFrame
 from serial_interface.serial_test import TwidBaseTest
-from parameterized import parameterized
 
 class TelemetryTest(TwidBaseTest):
 

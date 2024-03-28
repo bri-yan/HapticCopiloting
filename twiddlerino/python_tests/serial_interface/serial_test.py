@@ -8,11 +8,6 @@ SERIAL_PORT = 'COM9'
 SERIAL_BAUD_RATE = 1000000
 
 class TwidBaseTest(IsolatedAsyncioTestCase):
-    
-    def setUp(self) -> None:
-        super().setUp()
-        self.socket_thread = threading.Thread(target=lambda: run_socket_server_thread(self))
-        self.socket_thread.start()
 
     async def asyncSetUp(self):
         loop = asyncio.get_event_loop()
@@ -24,6 +19,3 @@ class TwidBaseTest(IsolatedAsyncioTestCase):
     async def asyncTearDown(self):
         self.twid.motor_stop()
         self.twid.transport.close()
-        
-    def tearDown(self) -> None:
-        self.socket_thread.join(10)
