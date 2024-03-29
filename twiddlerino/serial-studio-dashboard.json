@@ -127,7 +127,7 @@
                     "max": 0,
                     "min": 0,
                     "title": "velocity",
-                    "units": "deg/s",
+                    "units": "rpm",
                     "value": "",
                     "widget": ""
                 },
@@ -142,7 +142,7 @@
                     "max": 0,
                     "min": 0,
                     "title": "filtered velocity",
-                    "units": "deg/s",
+                    "units": "rpm",
                     "value": "",
                     "widget": ""
                 },

@@ -30,7 +30,7 @@ async def test(twid:TwidSerialInterfaceProtocol):
 
     for i in range(dcspan.size):
         twid.update_pwm(dcspan[i])
-        await asyncio.sleep(0.1)
+        await asyncio.sleep(0.5)
         data['dc'].append(twid.last_frame.pwm_duty_cycle)
         data['volts_approx'].append(twid.last_frame.pwm_duty_cycle/1024 * PWM_AMPLITUDE)
         data['current'].append(twid.last_frame.current)
@@ -42,13 +42,35 @@ async def test(twid:TwidSerialInterfaceProtocol):
     current = np.array(data['current'])
     rpm = np.array(data['vel_filtered'])
     rads = rpm*0.1047198
-    rads = rads[rads > 0] ; volts = volts[rads > 0] ; current = current[rads > 0]
-    v_curve = np.divide(volts,rads)
-    i_curve = np.divide(current,rads)
-    slope, intercept, r, p, se = scipy.stats.linregress(i_curve, v_curve) #linear regression to find slope and intercept
-    data['Ke'].append(slope)#slope of curve is motor constant
-    data['R'].append(intercept)#resistance in intercept
-    print(f'Calibration Complete:\nMotor Constant:{data['Ke']} V.s/rad\tWinding Resistance:{data['R']} Ohms')
+    v_curve = volts
+    i_curve = current
+    for i in range(volts.size):
+        if rads[i] != 0:
+            v_curve[i] = v_curve[i]/rads[i]
+            i_curve[i] = i_curve[i]/rads[i]
+        else:
+            v_curve[i] = 0
+            i_curve[i] = 0
+
+    slope, intercept, r, p, se = scipy.stats.linregress(i_curve[v_curve>=0], v_curve[v_curve>=0]) #linear regression to find slope and intercept
+    K = intercept
+    R = slope
+    data['Ke'].append(K)#slope of curve is motor constant
+    data['R'].append(R)#resistance in intercept
+    
+    torque = current*K
+    Bp, Bcp, r, p, se = scipy.stats.linregress(rads[rads >= 0], torque[rads >= 0])
+    # Bn, Bcn, r, p, se = scipy.stats.linregress(rads[rads <= 0], torque[rads <= 0])
+    data['B'].append(Bp)
+    # data['B'].append(Bn)
+    data['Bc'].append(Bcp)
+    # data['Bc'].append(Bcn)
+
+    print(f'Calibration Complete:\n/
+          Motor Constant:\t{data['Ke']} V.s/rad\n/
+          Winding Resistance:\t{data['R']} Ohms\n/
+          Friction (Linear):\t{data['B']} Nms\n/
+          Friction (Coulumb/Static)\t{data['Bc']} Nm\n')
 
     with open(f'motor_speed_cst_tbl.txt', "w") as f:
         for key,val in data:
