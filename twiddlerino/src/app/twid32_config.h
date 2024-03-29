@@ -49,7 +49,7 @@
 #define OUTPUT_SIGNAL_CORRECTION_THRESHOLD 1 //ERROR FROM SETPOINT
 
 //current sensor
-#define CURRENT_SENS_RESISTOR_OHM 0.5
+#define CURRENT_SENS_V_OFFSET 2.5
 
 //macro for struct (partial) init to fill out default controller parameters
 //CHANGE CONTROLLER DEFAULT CONFIG HERE!!!!
