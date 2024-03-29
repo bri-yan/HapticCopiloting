@@ -22,6 +22,9 @@
 //filters
 #include "app/filter/ewma_filter.h"
 
+//calibration
+#include "app/calibration/motor_lut.h"
+
 //comms
 #include "app/comms.h"
 
@@ -31,6 +34,8 @@
 
 #define _ENTER_CRITICAL() portENTER_CRITICAL_SAFE(&spinlock)
 #define _EXIT_CRITICAL() portEXIT_CRITICAL_SAFE(&spinlock)
+
+#define DEGS_TO_RPM 0.1666667
 
 /******************************************************************************/
 /*                              T Y P E D E F S                               */
@@ -55,7 +60,8 @@ static setpoint_t setpoint = {.pos = 0.0, .vel =0.0, .accel = 0.0, .torque = 0.0
 static uint32_t last_time = 0; //last loop timestamp us
 static uint32_t start_time = 0; //start timestamp us
 static uint32_t telem_dt = 0; //telemetry code delta time in us
-static uint32_t itr = 0; //loop iterations
+static uint32_t itr = 0; //loop 
+static double last_pos = 0;
 static telemetry_t telem;
 static EwmaFilter velocity_filt_ewa(controller_config.velocity_filter_const, 0.0);
 static EwmaFilter current_filt_ewa(controller_config.current_filter_const, 0.0);
@@ -79,11 +85,13 @@ void tcontrol_cfg(controller_config_t* config) {
     last_time = 0;
     start_time = 0;
     telem_dt = 0;
+    last_pos = 0;
     itr = 0;
     velocity_filt_ewa = EwmaFilter(controller_config.velocity_filter_const, 0.0);
     current_filt_ewa = EwmaFilter(controller_config.current_filter_const, 0.0);
     pid_controller = DiscretePID(&controller_config);
     telem.current_sps = current_sensor_sps();
+    telem.nframes_sent_queue = 0;
 
     const esp_timer_create_args_t timer_args = {
         .callback = pid_callback,
@@ -161,6 +169,7 @@ void tcontrol_update_cfg(controller_config_t* cfg) {
     controller_config.impedance.J = cfg->impedance.J;
     controller_config.impedance.B = cfg->impedance.B;
     controller_config.control_type = cfg->control_type;
+    controller_config.telemetry_sample_rate = cfg->telemetry_sample_rate;
     pid_controller.set_all_params(&controller_config);
     _EXIT_CRITICAL();
 }
@@ -184,7 +193,9 @@ static void pid_callback(void *args)
     telem.filtered_current = current_filt_ewa(telem.current);
 
     //read and filter velocity
-    telem.velocity = encoder_get_velocity();
+    // telem.velocity = encoder_get_velocity();
+    telem.velocity = ((telem.position - last_pos)/(controller_config.sample_time_us*1e-6)) * DEGS_TO_RPM;
+    last_pos = telem.position;
 
     motor_safety_check(telem.velocity);
 
@@ -192,7 +203,10 @@ static void pid_callback(void *args)
 
     //calculate torque
     telem.torque_net = controller_config.motor_Ke * telem.filtered_current;
-    telem.torque_control = controller_config.motor_Kv * telem.filtered_velocity;
+    telem.torque_control = controller_config.motor_Ke * lookup_exp_current((double)motor_get_duty_cycle()); //controller_config.motor_Kv * telem.filtered_velocity;
+    if (motor_get_state() == motor_state_t::MOTOR_DRIVE_CCW) {
+        telem.torque_control *= -1;
+    }
     telem.torque_external = telem.torque_net - telem.torque_control;
 
     telem.read_dt = micros() - telem.read_dt;
@@ -248,20 +262,20 @@ static void pid_callback(void *args)
     output_signal = pid_controller.compute(feedback_signal, setpoint_signal);
     telem.error = pid_controller.get_error();
 
-    if(ENABLE_OUTPUT_SIGNAL_CORRECTION) {
-        if (telem.error > OUTPUT_SIGNAL_CORRECTION_THRESHOLD) {
-            output_signal += OUTPUT_SIGNAL_CORRECTION_VALUE;
-        } else {
-            output_signal -= OUTPUT_SIGNAL_CORRECTION_VALUE;
-        }
-    }
+    // if(ENABLE_OUTPUT_SIGNAL_CORRECTION) {
+    //     if (telem.error > OUTPUT_SIGNAL_CORRECTION_THRESHOLD) {
+    //         output_signal += OUTPUT_SIGNAL_CORRECTION_VALUE;
+    //     } else {
+    //         output_signal -= OUTPUT_SIGNAL_CORRECTION_VALUE;
+    //     }
+    // }
 
     //apply control signal
     if(controller_config.control_type != control_type_t::NO_CTRL) {
-        telem.pwm_duty_cycle = motor_set_pwm(output_signal);
-    } else {
-        telem.pwm_duty_cycle = (double)motor_get_duty_cycle();
+        motor_set_pwm(output_signal);
     }
+    telem.pwm_duty_cycle = (double)motor_get_duty_cycle();
+
     telem.pwm_frequency = motor_get_frequency();
     telem.control_dt = micros() - telem.control_dt;
 
@@ -274,8 +288,9 @@ static void pid_callback(void *args)
     telem.Kd = controller_config.Kd;
     telem.impedance = controller_config.impedance;
 
-    if((itr % TELEMETRY_SAMPLES_PER_LOOP) == 0 && controller_config.telem_queue_handle != NULL) {
+    if((itr % controller_config.telemetry_sample_rate) == 0 && controller_config.telem_queue_handle != NULL) {
         BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+        telem.nframes_sent_queue+=1;
         xQueueSendFromISR(*controller_config.telem_queue_handle, &telem, &xHigherPriorityTaskWoken);
     }
     itr++;

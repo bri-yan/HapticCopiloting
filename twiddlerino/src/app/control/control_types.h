@@ -89,7 +89,7 @@ typedef struct {
     setpoint_t setpoint;
     double error;
     double position; //position in deg
-    double velocity; //velocity in deg/s
+    double velocity; //velocity in rpm
     double filtered_velocity; //low pass filtered velocity
     double current; //in amps
     double filtered_current; //low pass filtered current
@@ -108,6 +108,7 @@ typedef struct {
 
     //other
     bool pid_success_flag;
+    uint32_t nframes_sent_queue;
 } telemetry_t;
 
 /**
@@ -138,6 +139,8 @@ typedef struct {
 
     int32_t output_hlim;
     int32_t output_llim;
+
+    uint32_t telemetry_sample_rate;//telemetry sample rate in (control loops)/sample
 } controller_config_t;
 
 #endif // TWID_CONTROL_TYPES_H_

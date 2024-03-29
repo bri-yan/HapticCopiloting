@@ -46,6 +46,8 @@ Several commands are available to set parameters over the serial interface and t
 
 `"reset\n"` - Resets controller (configuration reverts to default)
 
+`"reboot\n"` - Reboots the microcontroller! UART driver will not be affected.
+
 `"telemetry_enable\n"` - Enable controller telemetry stream over serial (rate==`TELEMETRY_SAMPLES_PER_LOOP `)
 
 `"telemetry_disable\n"` - Disable controller telemetry stream over serial (rate==`TELEMETRY_SAMPLES_PER_LOOP `)
@@ -60,3 +62,5 @@ Several commands are available to set parameters over the serial interface and t
 `"set_setpoint,<double>,<double>,<double>,<double>,\n"` - Set position, velocity, acceleration and torque setpoints for the controller. 
 
 `"set_dutycycle,<int>,\n"` - Sets motor duty cycle directly regardless of controller running.
+
+`"set_telemsamplerate,<uint>,\n"` - Set telemetry sample rate in terms of (# control loops)/sample. I.e. how many control loops to wait before sending telemetry to serial queue.

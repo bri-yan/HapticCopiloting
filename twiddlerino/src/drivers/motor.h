@@ -80,5 +80,7 @@ int32_t motor_set_pwm(int32_t dc);
  */
 void motor_safety_check(double speed);
 
+void motor_fast_stop();
+
 
 #endif // MOTOR_H_

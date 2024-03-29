@@ -107,7 +107,7 @@ uint16_t current_sensor_sps() {
 /******************************************************************************/
 
 double ads_read(){
-  return ads.computeVolts(ads.getLastConversionResults());
+  return ads.computeVolts(ads.getLastConversionResults())/CURRENT_SENS_RESISTOR_OHM;
 }
 
 void TaskReadCurrentSensor(void *pvParameters) {

@@ -56,7 +56,7 @@ void motor_init(const gpio_num_t motor_power_pin, const gpio_num_t motor_dir0_pi
 
     // MOTOR pins
     pinMode(dir0_pin, OUTPUT);
-    pinMode(dir1_pin, OUTPUT);
+    // pinMode(dir1_pin, OUTPUT);
 
     //setup motor PWM output on MotorPowerPin
     //this uses the esp32 idf ledc driver
@@ -117,15 +117,16 @@ motor_state_t motor_set_state(motor_state_t state)
    {
      case motor_state_t::MOTOR_DRIVE_CCW:
        digitalWrite(dir0_pin, HIGH);
-       digitalWrite(dir1_pin, LOW);
+      //  digitalWrite(dir1_pin, LOW);
        break;
      case motor_state_t::MOTOR_DRIVE_CW:
         digitalWrite(dir0_pin, LOW);
-        digitalWrite(dir1_pin, HIGH);
+        // digitalWrite(dir1_pin, HIGH);
        break;
      case motor_state_t::MOTOR_LOW:
         digitalWrite(dir0_pin, LOW);
-        digitalWrite(dir1_pin, LOW);
+        ledcWrite(motor_pwm_channel, 0);
+        // digitalWrite(dir1_pin, LOW);
         break;
      default:
         if(Serial.availableForWrite()) {
@@ -137,12 +138,17 @@ motor_state_t motor_set_state(motor_state_t state)
 }
 
 void motor_safety_check(double speed) {
-    if(speed > MOTOR_MAX_SPEED_DEGS || speed < -MOTOR_MAX_SPEED_DEGS) {
-        motor_set_pwm(0);
-        motor_set_state(motor_state_t::MOTOR_LOW);
-        Serial.printf("Motor speed is too fast! %lf deg/s", speed);
-        esp_system_abort("Aborting! Motor speed is too fast!");
-    }
+  if(speed > MOTOR_MAX_SPEED_DEGS || speed < -MOTOR_MAX_SPEED_DEGS) {
+      motor_set_pwm(0);
+      motor_set_state(motor_state_t::MOTOR_LOW);
+      Serial.printf("Motor speed is too fast! %lf deg/s", speed);
+      esp_system_abort("Aborting! Motor speed is too fast!");
+  }
+}
+
+void motor_fast_stop() {
+  motor_set_pwm(0);
+  motor_set_state(motor_state_t::MOTOR_LOW);
 }
 
 

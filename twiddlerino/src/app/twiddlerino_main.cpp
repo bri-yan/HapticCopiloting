@@ -26,9 +26,6 @@
 #include "comms.h"
 #include "app/control/twid_control.h"
 
-//virtual environment interface
-#include "app/virtual_environment/virtual_environment.h"
-
 //arduino
 #include "Arduino.h"
 
@@ -108,9 +105,6 @@ void twiddlerino_setup(startup_type_t startup_type) {
   );
   Serial.printf("Parameter Update Task Initialized. Waiting for param update commands. Task Status: %i\n",eTaskGetState(xCommandTask));
 
-  //initialize game serial interface
-  game_interface_init();
-
   //start telemetry on core 0
   xTaskCreatePinnedToCore(
     TaskPublishTelemetry
@@ -152,7 +146,6 @@ void TaskPublishTelemetry(void *pvParameters) {
   for(;;) 
   {
     if(enable_debug_telemetry && Serial.availableForWrite() && (xQueueReceive(xQueueTelemetry, &t, 20) == pdTRUE)){
-      // publish_telemetry(&t);
       publish_telemetry_serial_studio(&t);
     }
     vTaskDelay( 1 );
@@ -198,14 +191,15 @@ void TaskReadTCommands(void *pvParameters) {
       //for logging purposes
       Serial.printf("Received data: %s\n", read_string);
 
-      if(read_string.substring(0,4) == "game") {
-        game_process_command(&read_string);
-      } else if(read_string == "STOP" || read_string == "stop"){
+     if(read_string == "STOP" || read_string == "stop"){
+        motor_fast_stop();
         tcontrol_stop();
-
       } else if(read_string == "RESET" || read_string == "reset"){
+        motor_fast_stop();
+        reset_sent_count();
         tcontrol_reset();
-
+      } else if(read_string == "REBOOT" || read_string == "reboot"){
+        esp_restart();
       } else if(read_string == "telemetry_enable") {
         enable_debug_telemetry = true;
       } else if(read_string == "telemetry_disable") {

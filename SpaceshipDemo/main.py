@@ -8,14 +8,12 @@ import pygame
 
 import asyncio
 import serial_asyncio
-from game_interface import GameInterfaceProtocol, TelemetryFrame
+from serial_interface.serial_interface import TwidSerialInterfaceProtocol, run_test, TelemetryFrame
 
 from game_objects import Asteroid, EnemyProjectile, EnemyShip, PlayerShip, Path
 
-game_interface: GameInterfaceProtocol
-
 ###SERIAL CONFIGURATION for esp32
-SERIAL_PORT = 'COM4'
+SERIAL_PORT = 'COM9'
 SERIAL_BAUD_RATE = 1000000
 
 # async version of pygame.time.Clock
@@ -39,11 +37,7 @@ class AsyncClock:
  
         await asyncio.sleep(delay)
 
-async def run_game():
-    global game_interface, loop
-    transport, game_interface = await serial_asyncio.create_serial_connection(loop, GameInterfaceProtocol, SERIAL_PORT, baudrate=SERIAL_BAUD_RATE)
-    await asyncio.sleep(0.5) #wait for connection to init
-
+async def run_game(game_interface:TwidSerialInterfaceProtocol):
     # Colors
     WHITE = (255, 255, 255)
     GRAY = (50, 50, 50)
@@ -243,11 +237,9 @@ async def run_game():
             game_interface.update_setpoint(position=target_position, velocity=ships[0].velocity, torque= 0.0)
             latest_frame: TelemetryFrame = game_interface.frames.get_nowait()
             right_ship.x = latest_frame.position - right_ship.width//2
-            print(f'frame #: {game_interface.frame_count}, frame: {latest_frame}')
+            # print(f'frame #: {game_interface.frame_count}, frame: {latest_frame}')
 
         # Limit frames per second
         await clock.tick(45)
 
-loop = asyncio.get_event_loop()
-loop.run_until_complete(run_game())
-loop.close()
+run_test(run_game, SERIAL_PORT, SERIAL_BAUD_RATE)
