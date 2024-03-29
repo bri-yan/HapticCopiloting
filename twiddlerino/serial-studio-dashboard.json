@@ -103,7 +103,7 @@
                 },
                 {
                     "alarm": 0,
-                    "fft": false,
+                    "fft": true,
                     "fftSamples": 1024,
                     "graph": true,
                     "index": 8,
@@ -133,7 +133,7 @@
                 },
                 {
                     "alarm": 0,
-                    "fft": false,
+                    "fft": true,
                     "fftSamples": 1024,
                     "graph": true,
                     "index": 10,
@@ -163,7 +163,7 @@
                 },
                 {
                     "alarm": 0,
-                    "fft": false,
+                    "fft": true,
                     "fftSamples": 1024,
                     "graph": true,
                     "index": 12,
@@ -379,6 +379,42 @@
                 }
             ],
             "title": "Control Parameters",
+            "widget": ""
+        },
+        {
+            "datasets": [
+                {
+                    "alarm": 0,
+                    "fft": false,
+                    "fftSamples": 1024,
+                    "graph": false,
+                    "index": 26,
+                    "led": false,
+                    "log": false,
+                    "max": 0,
+                    "min": 0,
+                    "title": "Telemetry Frames (internal queue)",
+                    "units": "#",
+                    "value": "",
+                    "widget": ""
+                },
+                {
+                    "alarm": 0,
+                    "fft": false,
+                    "fftSamples": 1024,
+                    "graph": false,
+                    "index": 27,
+                    "led": false,
+                    "log": false,
+                    "max": 0,
+                    "min": 0,
+                    "title": "Telemetry Frames (serial)",
+                    "units": "#",
+                    "value": "",
+                    "widget": ""
+                }
+            ],
+            "title": "Telemetry States",
             "widget": ""
         }
     ],

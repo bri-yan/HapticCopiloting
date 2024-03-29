@@ -8,16 +8,13 @@ import numpy as np
 
 import asyncio
 import serial_asyncio
-from serial_interface.serial_interface import TwidSerialInterfaceProtocol, TelemetryFrame
+from serial_interface.serial_interface import TwidSerialInterfaceProtocol, TelemetryFrame, run_test
 
 ###SERIAL CONFIGURATION for esp32
-SERIAL_PORT = 'COM3'
+SERIAL_PORT = 'COM9'
 SERIAL_BAUD_RATE = 1000000
 
-async def run_test():
-    global twid, loop
-    transport, twid = await serial_asyncio.create_serial_connection(loop, TwidSerialInterfaceProtocol, SERIAL_PORT, baudrate=SERIAL_BAUD_RATE)
-    await asyncio.sleep(0.5) #wait for connection to init
+async def test(twid:TwidSerialInterfaceProtocol):
     twid.turn_off_control()
     twid.update_pwm(0)
     await asyncio.sleep(0.5)
@@ -32,7 +29,7 @@ async def run_test():
         dc.append(twid.last_frame.pwm_duty_cycle)
         current.append(twid.last_frame.current)
         print(dc[-1],current[-1])
-    twid.update_pwm(0)
+    twid.end_test()
 
     with open(f'{datetime.time.__repr__()}_motor_current_calibration_table.txt', "w") as f:
         f.write('duty cycle (0-1024)\n')
@@ -42,8 +39,5 @@ async def run_test():
         for val in current:
             f.write(f'{val},\n')
 
-twid: TwidSerialInterfaceProtocol
-loop = asyncio.get_event_loop()
-loop.run_until_complete(run_test())
-loop.close()
+run_test(test, SERIAL_PORT, SERIAL_BAUD_RATE)
 
