@@ -32,6 +32,8 @@
 
 double ads_read();
 
+void zero_measurement();
+
 void TaskReadCurrentSensor(void *pvParameters);
 
 /******************************************************************************/
@@ -45,6 +47,8 @@ static Adafruit_ADS1115 ads;
 static TaskHandle_t xCurrentSensTask;
 
 static double latest_reading = 0.0;
+static bool zeroed_on_startup = false;
+static double zero = 0.0;
 
 static SemaphoreHandle_t xSensMutex;
 
@@ -71,6 +75,7 @@ void current_sensor_init() {
   ads.setDataRate(RATE_ADS1115_860SPS);
   ads.startADCReading(MUX_BY_CHANNEL[0], true);
   latest_reading = 0.0;
+  zero_measurement();
 
   xTaskCreatePinnedToCore(
     TaskReadCurrentSensor
@@ -107,7 +112,7 @@ uint16_t current_sensor_sps() {
 /******************************************************************************/
 
 double ads_read(){
-  return ads.computeVolts(ads.getLastConversionResults())/CURRENT_SENS_RESISTOR_OHM;
+  return (ads.computeVolts(ads.getLastConversionResults()) - CURRENT_SENS_V_OFFSET + zero);
 }
 
 void TaskReadCurrentSensor(void *pvParameters) {
@@ -116,4 +121,10 @@ void TaskReadCurrentSensor(void *pvParameters) {
     latest_reading = ads_read();
     vTaskDelay( 0 );
   }
+}
+
+void zero_measurement() {
+  zero = 0.0;
+  zero = ads_read();
+  zeroed_on_startup = true;
 }
