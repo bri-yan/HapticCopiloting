@@ -193,11 +193,11 @@ static void pid_callback(void *args)
     telem.filtered_current = current_filt_ewa(telem.current);
 
     //read and filter velocity
-    // telem.velocity = encoder_get_velocity();
+    //velocity is taken as the rate of change of the positional readings in 1 sample time
     telem.velocity = ((telem.position - last_pos)/(controller_config.sample_time_us*1e-6)) * DEGS_TO_RPM;
     last_pos = telem.position;
 
-    motor_safety_check(telem.velocity);
+    motor_safety_check(telem.filtered_velocity);
 
     telem.filtered_velocity = velocity_filt_ewa(telem.velocity);
 
