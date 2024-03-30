@@ -15,7 +15,7 @@ SERIAL_PORT = 'COM9'
 SERIAL_BAUD_RATE = 1000000
 
 async def test(twid:TwidSerialInterfaceProtocol):
-    await twid.update_telem_sample_rate(5)
+    await twid.update_telem_sample_rate(50)
     await twid.update_control_type(ControlType.NO_CTRL)
     await twid.update_dutycycle(0)
 
@@ -24,13 +24,16 @@ async def test(twid:TwidSerialInterfaceProtocol):
     current = []
 
     for i in range(dcspan.size):
-        print(dcspan[i])
-        await twid.update_dutycycle(dcspan[i])
-        await asyncio.sleep(0.5)
-
-        dc.append(twid.last_frame.pwm_duty_cycle)
-        current.append(twid.last_frame.current)
-        print(dc[-1],current[-1])
+        await twid.update_dutycycle(int(dcspan[i]))
+        await twid.wait_for_param('pwm_duty_cycle', int(dcspan[i]))
+        
+        #wait 1 sec until steady state
+        await asyncio.sleep(1.0)
+        
+        frame = twid.last_frame
+        dc.append(frame.pwm_duty_cycle)
+        current.append(frame.current)
+        print(f'dutycycle: {dc[-1]:.2f} %\tcurrent: {current[-1]:.3f}')
     await twid.end_test()
 
     with open(f'motor_current_calibration_table.txt', "w") as f:

@@ -1,4 +1,4 @@
-# serial_interface.py v1.3
+# serial_interface.py v1.4
 #   A python serial based protocol with an esp32 for a haptic virtual environment
 #   Also shares telemetry data over tcp socket - this can be accessed by other GUI software such as serial studio
 #
@@ -19,6 +19,11 @@ import queue
 
 #to open a socket and echo bytes to external GUI application
 import socket
+
+#decoding
+import re
+
+import time
 
 #external gui socket address
 SERIAL_STUDIO_HOST = '127.0.0.1'
@@ -128,6 +133,10 @@ class TwidSerialInterfaceProtocol(asyncio.Protocol):
     control_value_fields:list[tuple[int,str]] = [e.value for e in ControlType]
     socket_write_buffer:queue.Queue = queue.Queue(100)
     _instance = None
+    
+    #re
+    cmd_pattern = rb'/\*TWIDDLERINO_ACK,(-?\d+)\*/'
+    telem_pattern = rb'/\*\*TWIDDLERINO_TELEMETRY,([^/]+?)\*\*/'
 
     def __init__(self):
         super(TwidSerialInterfaceProtocol, self).__init__()
@@ -157,6 +166,7 @@ class TwidSerialInterfaceProtocol(asyncio.Protocol):
         self._stop_flag.set()
 
     def data_received(self, data) -> None:
+        #echo to socket buffer
         if self.socket_write_buffer.full():
             try:
                 self.socket_write_buffer.get_nowait()
@@ -167,59 +177,60 @@ class TwidSerialInterfaceProtocol(asyncio.Protocol):
         #add buffer (it could be empty)
         data = self.buffer + data
         self.buffer = b''
+        
+        #split by lines and try to decode each line
+        data_lines = data.split(b'\n')
+        for i in range(len(data_lines)):
+            processed = False
+            line = data_lines[i]
 
-        #extract any ack bytes
-        if b'ACK' in data:
-            if B'/*T' in data and b'*/' in data:
-                #we have an ack
-                self._ack_flag.set()
-                spl = data.split(b'/*T')
-                spl2 = spl[1].split(b'*/')
-                data = spl[0] + b''.join(spl2[1:])
-                try:
-                    self._last_ack_payload = CommandType(int(spl2[0].split(b',')[1].decode("utf-8")))
-                except Exception as errmsg:
-                    print(errmsg)
-                    print('Failed to decode ack payload.')
+            #check if this is a command ack string
+            if b'/*T' in line:
+                match = re.match(self.cmd_pattern, line)
+                if match:
+                    ack_val = int(match.group(1))
+                    self._last_ack_payload = CommandType(ack_val)
+                    self._ack_flag.set()
+                    processed = True
+            #check if this is a telemetry string
+            elif b'/**' in line or b'**/' in line:
+                match = re.match(self.telem_pattern, line)
+                if match:
+                    stripped_telem_bytes = match.group(1)
+                    frame = None
 
-        #check if we are at start of frame
-        if b'/**' in data:
-            if b'**/' in data:
-                #extract complete frame
-                spl = data.split(b'/**')
-                for seg in spl:
-                    #check if we are at end of frame
-                    if seg == b'':
-                        continue
-                    elif b'**/' not in seg:
-                        if seg == spl[0]:
-                            self.buffer += seg
-                        else:
-                            self.buffer += b'/**' + seg
-                    else:
-                        try:
-                            frame = self.bytes2frame(seg.split(b'**/')[0])
-                            self.frame_count+=1
+                    try:
+                        #try to decode frame 
+                        frame = self.bytes2frame(stripped_telem_bytes)
+                    except Exception as errmsg:
+                        self.err_frame_count+=1
+                    
+                    #if we decoded a frame
+                    if frame is not None:
+                        self.last_frame = frame
+                        self.frame_count+=1
 
-                            #flip a flag for telemetry after reboot cmd
-                            if self._reboot_flag.is_set():
-                                self._reboot_flag.clear()
-                                self._telem_after_reboot.set()
+                        #add to queue
+                        if self.frames.full():
+                            self.frames.get_nowait()
+                        self.frames.put(frame)
 
-                            if self.frames.full():
-                                self.frames.get_nowait()
-                            self.frames.put(frame)
-                            self.last_frame = frame
-                            if self._wait_for_name is not None:
-                                if getattr(frame, self._wait_for_name) == self._wait_for_value:
-                                    self._wait_for_param_flag.set()
-                        except Exception as errmsg:
-                            # print(errmsg)
-                            self.err_frame_count+=1
-            else:
-                self.buffer += data
-        else:
-            self.buffer += data
+                        #handle telemetry received after reboot flag
+                        if self._reboot_flag.is_set():
+                            self._reboot_flag.clear()
+                            self._telem_after_reboot.set()
+
+                        #handle waiting for specific parameter flag
+                        if self._wait_for_name is not None:
+                            if getattr(frame, self._wait_for_name) == self._wait_for_value:
+                                self._wait_for_param_flag.set()
+                        
+                        processed = True
+            if not processed:
+                if i < len(data_lines) - 1:
+                    self.buffer += line + b'\n'
+                else:
+                    self.buffer += b'\n' + line
 
     def pause_reading(self) -> None:
         # This will stop the callbacks to data_received
@@ -238,11 +249,11 @@ class TwidSerialInterfaceProtocol(asyncio.Protocol):
     def bytes2frame(self, data:bytes) -> TelemetryFrame :
         spl = data.decode("utf-8").split(',')
         # print(spl, len(spl))
-        if len(spl) != TELEMETRY_FRAME_LENGTH:
+        if len(spl) != TELEMETRY_FRAME_LENGTH - 1:
             raise Exception(f'cannot convert bytes to telemetry frame! len: {len(spl)}')
         t = TelemetryFrame()
         count: int = 0
-        for item in spl[1:]:
+        for item in spl:
             setattr(t,self.datafields[count],float(item))
             count+=1
         for num, name in TwidSerialInterfaceProtocol.control_value_fields:
@@ -251,6 +262,8 @@ class TwidSerialInterfaceProtocol(asyncio.Protocol):
         return t
 
     #blocking function that returns true when command to twid is acknowledged with correct code
+    #this is a awaitable function
+    #if blocking is set to false, send command will not wait for acknowledgement
     async def send_cmd(self, cmd_bytes:bytes, cmd_type:CommandType, blocking=True, timeout=0.25, reboot_timeout=5) -> bool:
         self._last_ack_payload = CommandType.NA_CMD
         self._ack_flag.clear()
@@ -280,6 +293,8 @@ class TwidSerialInterfaceProtocol(asyncio.Protocol):
 
         return False
     
+    #wait for telemetry parameter to equal a certain value
+    #this is a awaitable function
     async def wait_for_param(self, name:str, value, timeout=0.5):
         self._wait_for_name = name
         self._wait_for_value = value
@@ -294,6 +309,20 @@ class TwidSerialInterfaceProtocol(asyncio.Protocol):
         self._wait_for_value = None
         return success
     
+    #collect telemetry for defined duration +/- 1ms and return a list of collected telemetry
+    #this is a awaitable function
+    async def collect_telem(self, duration=1) -> list[TelemetryFrame]:
+        out = []
+        start = time.time()
+        start_size = self.frames.qsize()
+        
+        while time.time() < start + duration:
+            if self.frames.qsize() > start_size:
+                out.append(self.frames.get())
+            await asyncio.sleep(1e-3)
+        
+        return out
+  
     async def end_test(self):
         await self.motor_stop()
         await self.esp32_reboot()

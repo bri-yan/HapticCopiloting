@@ -119,7 +119,7 @@ uint32_t publish_telemetry(telemetry_t *telem) {
 }
 
 void ack_cmd(cmd_type_t cmd) {
-    Serial.printf("/*TWIDDLERINIO_ACK,%i*/\n",(int16_t)cmd);
+    Serial.printf("/*TWIDDLERINO_ACK,%i*/\n",(int16_t)cmd);
 }
 
 //Serial studio frames are read as "/*TITLE,%s,%s,%s,...,%s*/"

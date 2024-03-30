@@ -29,8 +29,11 @@ async def test(twid:TwidSerialInterfaceProtocol):
     data = {'dc':[], 'volts_approx':[], 'current':[], 'vel_filtered':[],'i_rpm':[],'v_rpm':[],'Ke':[],'R':[]}
 
     for i in range(dcspan.size):
-        await twid.update_dutycycle(dcspan[i])
-        await asyncio.sleep(0.5)
+        await twid.update_dutycycle(int(dcspan[i]))
+        await twid.wait_for_param('pwm_duty_cycle', int(dcspan[i]))
+        
+        #wait 1 sec until steady state
+        await asyncio.sleep(1.0)
 
         data['dc'].append(twid.last_frame.pwm_duty_cycle)
         data['volts_approx'].append(twid.last_frame.pwm_duty_cycle/1024 * PWM_AMPLITUDE)

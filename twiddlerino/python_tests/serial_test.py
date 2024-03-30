@@ -33,6 +33,10 @@ async def test(twid:TwidSerialInterfaceProtocol):
     assert await twid.send_cmd(bytes(f'reset\n',"utf-8"), CommandType.RESET)
     assert await twid.send_cmd(bytes(f'reboot\n',"utf-8"), CommandType.REBOOT)
     
+    assert await twid.update_telem_sample_rate(10)
+    out = await twid.collect_telem()
+    print(len(out))
+    
     await twid.end_test()
 
 run_test(test, SERIAL_PORT, SERIAL_BAUD_RATE)
