@@ -24,12 +24,16 @@
  * 
  */
 typedef enum {
-    POSITION_CTRL,      //position pid control
-    VELOCITY_CTRL,      //velocity pid control
-    TORQUE_CTRL,        //torque pid control
-    IMPEDANCE_CTRL,     //cascaded impedance control with torque pid control inner loop
-    ADMITTANCE_CTRL,    //cascaded admittance control with position pid control inner loop
-    NO_CTRL             //no control, telemetry only
+    POSITION_CTRL,                  //position pid control
+    VELOCITY_CTRL,                  //velocity pid control
+    TORQUE_CTRL,                    //torque pid control
+    IMPEDANCE_CTRL,                 //cascaded impedance control with torque pid control inner loop
+    ADMITTANCE_CTRL,                //cascaded admittance control with position pid control inner loop
+    NO_CTRL,                        //no control, telemetry only
+    IMPEDANCE_CTRL_SPRING,          //impedance control simplified to spring mode and accounting for friction torque
+    IMPEDANCE_CTRL_DAMPING,         //impedance control simplified to damer mode and accounting for friction torque
+    IMPEDANCE_CTRL_SPRING_DAMPING,  //impedance control with spring and damping and accounting for friction torque
+    IMPEDANCE_CTRL_IGNORE_T_EXT,    //impedance control with spring, damper, intertia and accounting for friction torque
 } control_type_t;
 
 /**
@@ -105,6 +109,7 @@ typedef struct {
     double Ki;
     double Kd;
     virtual_impedance_t impedance;
+    control_type_t control_type;
 
     //other
     bool pid_success_flag;

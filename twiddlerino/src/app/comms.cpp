@@ -44,26 +44,25 @@ static char timed_read();
 
 static uint32_t nframes_sent_serial = 0;
 
-
 /******************************************************************************/
 /*                       P U B L I C  F U N C T I O N S                       */
 /******************************************************************************/
 
-bool decode_config_cmd(String *str, controller_config_t *cfg) {
+cmd_type_t decode_config_cmd(String *str, controller_config_t *cfg) {
     if(str->substring(0,7).compareTo("set_pid") == 0){
         double vals[3] = {0.0 ,0.0, 0.0};
         extract_doubles(str, vals, 3);
         cfg->Kp = vals[0];
         cfg->Ki = vals[1];
         cfg->Kd = vals[2];
-        return true;
+        return cmd_type_t::SET_PID;
     } else if(str->substring(0,13).compareTo("set_impedance") == 0) {
         double vals[3] = {0.0,0.0,0.0};
         extract_doubles(str, vals, 3);
         cfg->impedance.K = vals[0];
         cfg->impedance.B = vals[1];
         cfg->impedance.J = vals[2];
-        return true;
+        return cmd_type_t::SET_IMPEDANCE;
     } else if(str->substring(0,8).compareTo("set_mode") == 0) {
         int16_t i0 = str->indexOf(',',0);
         i0+=1;
@@ -83,23 +82,30 @@ bool decode_config_cmd(String *str, controller_config_t *cfg) {
             mode = control_type_t::ADMITTANCE_CTRL;
         } else if(name=="no_control") {
             mode = control_type_t::NO_CTRL;
+        } else if(name=="impedance_spring") {
+            mode = control_type_t::IMPEDANCE_CTRL_SPRING;
+        } else if(name=="impedance_damping" || name=="impedance_damper") {
+            mode = control_type_t::IMPEDANCE_CTRL_DAMPING;
+        } else if(name=="impedance_ignore_t_ext") {
+            mode = control_type_t::IMPEDANCE_CTRL_IGNORE_T_EXT;
+        } else if(name=="impedance_spring_damping") {
+            mode = control_type_t::IMPEDANCE_CTRL_SPRING_DAMPING;
         } else {
-            return false;
+            return cmd_type_t::NA_CMD;
         }
 
         cfg->control_type = mode;
-        return true;
+        return cmd_type_t::SET_MODE;
     } else if(str->substring(0,19) == "set_telemsamplerate") {
         double vals[1] = {0.0};
         extract_doubles(str, vals, 1);
         if (vals[0] >= 1) {
             cfg->telemetry_sample_rate = (uint32_t)vals[0];
-            return true;
+            return cmd_type_t::SET_TELEMSAMPLERATE;
         }
     }
 
-    return false;
-
+    return cmd_type_t::NA_CMD;
 }
 
 uint32_t publish_telemetry(telemetry_t *telem) {
@@ -112,6 +118,10 @@ uint32_t publish_telemetry(telemetry_t *telem) {
     return size;
 }
 
+void ack_cmd(cmd_type_t cmd) {
+    Serial.printf("/*TWIDDLERINIO_ACK,%i*/\n",(int16_t)cmd);
+}
+
 //Serial studio frames are read as "/*TITLE,%s,%s,%s,...,%s*/"
 //start of frame: /*
 //end of frame: */
@@ -121,12 +131,12 @@ uint32_t publish_telemetry_serial_studio(telemetry_t *telem) {
     telemetry_t t = *telem;
     if(Serial) {
         nframes_sent_serial+=1;
-        size = Serial.printf("/*TWIDDLERINO_TELEMETRY,%lu,%lu,%lu,%lu,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lu,%lu*/\n", 
+        size = Serial.printf("/**TWIDDLERINO_TELEMETRY,%lu,%lu,%lu,%lu,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lu,%lu,%i**/\n", 
             t.timestamp_ms, t.loop_dt, t.control_dt, t.read_dt, 
             t.pwm_duty_cycle, t.pwm_frequency, 
             t.position, t.velocity, t.filtered_velocity, t.current, t.filtered_current, t.torque_external, t.torque_control, t.torque_net,
             t.setpoint.pos, t.setpoint.vel, t.setpoint.accel, t.setpoint.torque,
-            t.Kp, t.Ki, t.Kd, t.impedance.K, t.impedance.B, t.impedance.J, t.nframes_sent_queue, nframes_sent_serial);
+            t.Kp, t.Ki, t.Kd, t.impedance.K, t.impedance.B, t.impedance.J, t.nframes_sent_queue, nframes_sent_serial, (int16_t)t.control_type);
     }
     return size;
 }
@@ -166,66 +176,6 @@ void extract_doubles(String * str, double* out, uint16_t num_values) {
         out[j] = str->substring(i0,i).toDouble();
         i++;
     }
-}
-
-//initializes Twiddlerino
-cmd_type_t decode_test_cmd(String * read_string, test_config_t *t) {
-    int32_t i = 0;
-    int32_t i0 = 0;
-    t->cmd_type = cmd_type_t::NA_CMD;
-
-    //'config_test,P:{params.P},I:{params.I},D:{params.D},set_point:{params.SetPoint}'
-    if(read_string->substring(0,11).compareTo("config_test") == 0){
-        t->cmd_type = cmd_type_t::CONFIG_TEST;
-
-        i0 = read_string->indexOf(':',0);
-        i0+=1;
-        i = read_string->indexOf(',',i0);
-        t->Kp = read_string->substring(i0,i).toDouble();
-        Serial.printf("substring decoded from %i to %i : %s\n",i0,i,read_string->substring(i0,i));
-
-        i0 = read_string->indexOf(':',i0+1);
-        i0+=1;
-        i = read_string->indexOf(',',i0);
-        t->Ki = read_string->substring(i0,i).toDouble();
-        Serial.printf("substring decoded from %i to %i : %s\n",i0,i,read_string->substring(i0,i));
-
-        i0 = read_string->indexOf(':',i0+1);
-        i0+=1;
-        i = read_string->indexOf(',',i0);
-        t->Kd = read_string->substring(i0,i).toDouble();
-        Serial.printf("substring decoded from %i to %i : %s\n",i0,i,read_string->substring(i0,i));
-
-        i0 = read_string->indexOf(':',i0+1);
-        i0+=1;
-        i = read_string->indexOf(',',i0);
-        t->set_point = read_string->substring(i0,i).toDouble();
-        Serial.printf("substring decoded from %i to %i : %s\n",i0,i,read_string->substring(i0,i));
-
-        i0 = read_string->indexOf(':',i0+1);
-        i0+=1;
-        i = read_string->indexOf(',',i0);
-        t->sample_rate_us = read_string->substring(i0,i).toInt();
-        Serial.printf("substring decoded from %i to %i : %s\n",i0,i,read_string->substring(i0,i));
-
-        i0 = read_string->indexOf(':',i0+1);
-        i0+=1;
-        i = read_string->indexOf(',',i0);
-        if (i < 0 || i > read_string->length()) {
-            i = read_string->length();
-        }
-        t->test_duration_ms = read_string->substring(i0,i).toInt();
-        Serial.printf("substring decoded from %i to %i : %s\n",i0,i,read_string->substring(i0,i));
-
-        // Serial.printf("Starting control task with params:\n\t\tKp:%lf\tKi:%lf\tKd:%lf\tsample_rate_us:%lu\ttest_duration_ms:%lu\n",
-        //   t.Kp,t.Ki,t.Kd,t.sample_rate_us,t.test_duration_ms);
-    } else if (read_string->substring(0,10).compareTo("start_test") == 0) {
-        t->cmd_type = cmd_type_t::START_TEST;
-    } else if (read_string->substring(0,10).compareTo("abort_test") == 0) {
-        t->cmd_type = cmd_type_t::ABORT_TEST;
-    }
-
-    return t->cmd_type;
 }
 
 void reset_sent_count() {

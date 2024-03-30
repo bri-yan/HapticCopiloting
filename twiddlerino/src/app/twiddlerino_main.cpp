@@ -182,28 +182,38 @@ void TaskReadTCommands(void *pvParameters) {
 
   String read_string;
   Serial.printf("Update Control Params Task Started\n");
+  cmd_type_t last_cmd = NA_CMD;
 
   for(;;) 
   {
     //check if any new bytes received in uart buffer
     if( Serial.available()) {
       read_string = read_string_until('\n');
+      last_cmd = cmd_type_t::NA_CMD;
       //for logging purposes
-      Serial.printf("Received data: %s\n", read_string);
+      //Serial.printf("Received data: %s\n", read_string);
 
      if(read_string == "STOP" || read_string == "stop"){
         motor_fast_stop();
         tcontrol_stop();
+        last_cmd = cmd_type_t::STOP;
       } else if(read_string == "RESET" || read_string == "reset"){
         motor_fast_stop();
         reset_sent_count();
         tcontrol_reset();
+        last_cmd = cmd_type_t::RESET;
       } else if(read_string == "REBOOT" || read_string == "reboot"){
+        last_cmd = cmd_type_t::REBOOT;
+        //we need to send ack before the cpu resets
+        ack_cmd(last_cmd);
+        //reset cpu
         esp_restart();
       } else if(read_string == "telemetry_enable") {
         enable_debug_telemetry = true;
+        last_cmd = cmd_type_t::TELEM_ENABLE;
       } else if(read_string == "telemetry_disable") {
         enable_debug_telemetry = false;
+        last_cmd = cmd_type_t::TELEM_DISABLE;
       } else if(read_string.substring(0,12) == "set_setpoint"){
         double vals[4] = {0.0, 0.0, 0.0, 0.0};
         extract_doubles(&read_string, vals, 4);
@@ -216,7 +226,7 @@ void TaskReadTCommands(void *pvParameters) {
 
         tcontrol_update_setpoint(&sp);
         Serial.printf("Setpoint updated.\n");
-
+        last_cmd = cmd_type_t::SET_SETPOINT;
       } else if(read_string.substring(0,13) == "set_dutycycle") {
           int16_t i0 = read_string.indexOf(',',0);
           i0+=1;
@@ -225,18 +235,20 @@ void TaskReadTCommands(void *pvParameters) {
           motor_set_pwm(dc);
           Serial.printf("Set pwm duty cycle to %li with frequency %lu.\nMotor State: %i.\n",
           motor_get_duty_cycle(), motor_get_frequency(), motor_get_state());
-
+          last_cmd = cmd_type_t::SET_DUTYCYCLE;
       } else {
         controller_config_t cfg;
         tcontrol_get_cfg(&cfg);
-
-        if(decode_config_cmd(&read_string, &cfg)){
+        last_cmd = decode_config_cmd(&read_string, &cfg);
+        if(last_cmd>0){
           tcontrol_update_cfg(&cfg);
           Serial.printf("Controller config updated.\n");
         }
 
-        print_controller_cfg();
+        // print_controller_cfg();
       }
+
+      ack_cmd(last_cmd);
     }
 
     vTaskDelay( 10 );

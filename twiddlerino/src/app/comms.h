@@ -31,10 +31,18 @@
  * 
  */
 typedef enum {
-    CONFIG_TEST,
-    START_TEST,
-    ABORT_TEST,
-    NA_CMD = -1
+    NA_CMD = -1,
+    STOP = 1,
+    RESET= 2,
+    REBOOT= 3,
+    TELEM_ENABLE= 4,
+    TELEM_DISABLE= 5,
+    SET_SETPOINT= 6,
+    SET_DUTYCYCLE= 7,
+    SET_PID= 8,
+    SET_IMPEDANCE= 9,
+    SET_MODE= 10,
+    SET_TELEMSAMPLERATE= 11,
 } cmd_type_t;
 
 /**
@@ -68,12 +76,11 @@ typedef union {
 /*                             F U N C T I O N S                              */
 /******************************************************************************/
 
-//deprecated - read test commands
-cmd_type_t decode_test_cmd(String *, test_config_t *);
-
 // read controller config strings, will return false if string is invalid/not recognized, 
 // otherwise will fill config struct
-bool decode_config_cmd(String *, controller_config_t *);
+cmd_type_t decode_config_cmd(String *, controller_config_t *);
+
+void ack_cmd(cmd_type_t);
 
 /**
  * @brief Publish comma seperated telemetry string (utf-8) over serial

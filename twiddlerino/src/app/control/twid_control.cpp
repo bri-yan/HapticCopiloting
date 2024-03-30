@@ -236,17 +236,51 @@ static void pid_callback(void *args)
             feedback_signal = telem.filtered_current;
             setpoint_signal = setpoint.torque / controller_config.motor_Ke;;
             break;
-        case control_type_t::IMPEDANCE_CTRL:
+        case control_type_t::IMPEDANCE_CTRL_SPRING:
+            //apply spring impedance law
+            setpoint_signal = 
+            ((controller_config.motor_Kv * telem.filtered_velocity) 
+            + ((controller_config.impedance.K) * (setpoint.pos - telem.position))) 
+            / controller_config.motor_Ke;
+
+            //feeback signal is current
+            feedback_signal = telem.current;
+            break;
+
+        case control_type_t::IMPEDANCE_CTRL_DAMPING:
+            //apply damping impedance law
+            setpoint_signal = 
+            ((controller_config.motor_Kv * telem.filtered_velocity) 
+            + (controller_config.impedance.B) * (setpoint.vel - telem.filtered_velocity)) 
+            / controller_config.motor_Ke;
+            feedback_signal = telem.current;
+            break;
+        case control_type_t::IMPEDANCE_CTRL_SPRING_DAMPING:
+            //apply impedance law, the setpoint signal is a torque
+            setpoint_signal = (controller_config.motor_Kv * telem.filtered_velocity) + 
+                ((controller_config.impedance.K) * (setpoint.pos - telem.position)) +
+                ((controller_config.impedance.B) * (setpoint.vel - telem.filtered_velocity));
+            setpoint_signal/=controller_config.motor_Ke;
+            feedback_signal = telem.current;
+            break;
+        case control_type_t::IMPEDANCE_CTRL_IGNORE_T_EXT:
             //apply impedance law, the setpoint signal is a torque
             setpoint_signal = (controller_config.motor_J * setpoint.accel) + 
-                (telem.torque_external * (1- jjv)) + 
                 (controller_config.motor_Kv * telem.filtered_velocity) + 
                 ((jjv * controller_config.impedance.K) * (setpoint.pos - telem.position)) +
                 ((jjv * controller_config.impedance.B) * (setpoint.vel - telem.filtered_velocity));
             //convert torque to current for current control
             setpoint_signal/=controller_config.motor_Ke;
-            
-            //feeback signal is current
+            feedback_signal = telem.current;
+            break;
+        case control_type_t::IMPEDANCE_CTRL:
+            //apply impedance law, the setpoint signal is a torque
+            setpoint_signal = (controller_config.motor_J * setpoint.accel) + 
+                (telem.torque_external * (1 - jjv)) + 
+                (controller_config.motor_Kv * telem.filtered_velocity) + 
+                ((jjv * controller_config.impedance.K) * (setpoint.pos - telem.position)) +
+                ((jjv * controller_config.impedance.B) * (setpoint.vel - telem.filtered_velocity));
+            setpoint_signal/=controller_config.motor_Ke;
             feedback_signal = telem.current;
             break;
         case control_type_t::ADMITTANCE_CTRL:
@@ -287,6 +321,7 @@ static void pid_callback(void *args)
     telem.Ki = controller_config.Ki;
     telem.Kd = controller_config.Kd;
     telem.impedance = controller_config.impedance;
+    telem.control_type = controller_config.control_type;
 
     if((itr % controller_config.telemetry_sample_rate) == 0 && controller_config.telem_queue_handle != NULL) {
         BaseType_t xHigherPriorityTaskWoken = pdFALSE;

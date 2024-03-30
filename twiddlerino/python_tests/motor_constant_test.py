@@ -9,7 +9,7 @@ import scipy
 
 import asyncio
 import serial_asyncio
-from serial_interface.serial_interface import TwidSerialInterfaceProtocol, TelemetryFrame, run_test
+from serial_interface.serial_interface import TwidSerialInterfaceProtocol, TelemetryFrame, run_test, ControlType
 
 ###SERIAL CONFIGURATION for esp32
 SERIAL_PORT = 'COM9'
@@ -21,22 +21,23 @@ SERIAL_BAUD_RATE = 1000000
 PWM_AMPLITUDE = 12
 
 async def test(twid:TwidSerialInterfaceProtocol):
-    twid.turn_off_control()
-    twid.update_pwm(0)
-    await asyncio.sleep(0.5)
+    await twid.update_telem_sample_rate(20)
+    await twid.update_control_type(ControlType.NO_CTRL)
+    await twid.update_dutycycle(0)
 
     dcspan = np.linspace(0,1024,100)
     data = {'dc':[], 'volts_approx':[], 'current':[], 'vel_filtered':[],'i_rpm':[],'v_rpm':[],'Ke':[],'R':[]}
 
     for i in range(dcspan.size):
-        twid.update_pwm(dcspan[i])
+        await twid.update_dutycycle(dcspan[i])
         await asyncio.sleep(0.5)
+
         data['dc'].append(twid.last_frame.pwm_duty_cycle)
         data['volts_approx'].append(twid.last_frame.pwm_duty_cycle/1024 * PWM_AMPLITUDE)
         data['current'].append(twid.last_frame.current)
         data['vel_filtered'].append(twid.last_frame.filtered_velocity)
         print(f'progress:{i/dcspan.size*100:.2f} %\tdc:{data['dc'][-1]}\tamps:{data['current'][-1]}\trpm:{data['vel_filtered'][-1]}')
-    twid.end_test()
+    await twid.end_test()
 
     volts = np.array(data['volts_approx'])
     current = np.array(data['current'])
@@ -66,10 +67,10 @@ async def test(twid:TwidSerialInterfaceProtocol):
     data['Bc'].append(Bcp)
     # data['Bc'].append(Bcn)
 
-    print(f'Calibration Complete:\n/
-          Motor Constant:\t{data['Ke']} V.s/rad\n/
-          Winding Resistance:\t{data['R']} Ohms\n/
-          Friction (Linear):\t{data['B']} Nms\n/
+    print(f'Calibration Complete:\n\
+          Motor Constant:\t{data['Ke']} V.s/rad\n\
+          Winding Resistance:\t{data['R']} Ohms\n\
+          Friction (Linear):\t{data['B']} Nms\n\
           Friction (Coulumb/Static)\t{data['Bc']} Nm\n')
 
     with open(f'motor_speed_cst_tbl.txt', "w") as f:

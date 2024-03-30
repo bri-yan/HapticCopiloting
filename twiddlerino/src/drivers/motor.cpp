@@ -138,7 +138,7 @@ motor_state_t motor_set_state(motor_state_t state)
 }
 
 void motor_safety_check(double speed) {
-  if(speed > MOTOR_MAX_SPEED_DEGS || speed < -MOTOR_MAX_SPEED_DEGS) {
+  if(speed > MOTOR_MAX_SPEED_RPM || speed < -MOTOR_MAX_SPEED_RPM) {
       motor_set_pwm(0);
       motor_set_state(motor_state_t::MOTOR_LOW);
       Serial.printf("Motor speed is too fast! %lf deg/s", speed);
