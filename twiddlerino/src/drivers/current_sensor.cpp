@@ -70,12 +70,6 @@ void current_sensor_init() {
   //note ads.begin() implicity uses i2c address 72U
   //                and default scl/sda i2c pins gpio 22 (scl) and gpio21 (sda)
 
-  //set i2c clock to fast mode
-  i2cSetClock(0, 400000U);
-  uint32_t freq = 0;
-  i2cGetClock(0, &freq);
-  Serial.printf("[current_sensor_init] i2c frequency: %lu\n", freq);
-
   //setup alert pin
   pinMode(PIN_CURRENT_SENS_ADC_ALERT, INPUT);
   //read adc on every altert falling edge
@@ -89,6 +83,12 @@ void current_sensor_init() {
       Serial.printf("Current Sensor: Failed to init ADS115.\n");
     }
   }
+
+  //set i2c clock to fast mode
+  i2cSetClock(0, 400000U);
+  uint32_t freq = 0;
+  i2cGetClock(0, &freq);
+  Serial.printf("[current_sensor_init] i2c frequency: %lu\n", freq);
 
   ads.setDataRate(RATE_ADS1115_860SPS);
   ads.startADCReading(MUX_BY_CHANNEL[0], true);
