@@ -1,4 +1,4 @@
-# serial_interface.py v1.4
+# serial_interface.py v1.5
 #   A python serial based protocol with an esp32 for a haptic virtual environment
 #   Also shares telemetry data over tcp socket - this can be accessed by other GUI software such as serial studio
 #
@@ -29,7 +29,7 @@ import time
 SERIAL_STUDIO_HOST = '127.0.0.1'
 SERIAL_STUDIO_PORT = 15555
 
-TELEMETRY_FRAME_LENGTH = 28
+TELEMETRY_FRAME_LENGTH = 29
 
 #python copy of control_type_t in esp32 firmware
 class ControlType(Enum):
@@ -113,6 +113,9 @@ class TelemetryFrame:
     #control type id
     control_type_val:int=0
     control_type:ControlType= ControlType(ControlType.NO_CTRL)
+    
+    #adc volts
+    current_sens_adc_voltage:float = 0
 
 #serial async protocol for interfacing with the twiddlerino
 class TwidSerialInterfaceProtocol(asyncio.Protocol):
