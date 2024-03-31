@@ -131,12 +131,12 @@ uint32_t publish_telemetry_serial_studio(telemetry_t *telem) {
     telemetry_t t = *telem;
     if(Serial) {
         nframes_sent_serial+=1;
-        size = Serial.printf("/**TWIDDLERINO_TELEMETRY,%lu,%lu,%lu,%lu,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lu,%lu,%i**/\n", 
+        size = Serial.printf("/**TWIDDLERINO_TELEMETRY,%lu,%lu,%lu,%lu,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lu,%lu,%i,%lf**/\n", 
             t.timestamp_ms, t.loop_dt, t.control_dt, t.read_dt, 
             t.pwm_duty_cycle, t.pwm_frequency, 
             t.position, t.velocity, t.filtered_velocity, t.current, t.filtered_current, t.torque_external, t.torque_control, t.torque_net,
             t.setpoint.pos, t.setpoint.vel, t.setpoint.accel, t.setpoint.torque,
-            t.Kp, t.Ki, t.Kd, t.impedance.K, t.impedance.B, t.impedance.J, t.nframes_sent_queue, nframes_sent_serial, (int16_t)t.control_type);
+            t.Kp, t.Ki, t.Kd, t.impedance.K, t.impedance.B, t.impedance.J, t.nframes_sent_queue, nframes_sent_serial, (int16_t)t.control_type, t.current_sens_adc_volts);
     }
     return size;
 }

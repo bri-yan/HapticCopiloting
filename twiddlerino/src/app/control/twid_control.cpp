@@ -189,7 +189,8 @@ static void pid_callback(void *args)
     telem.position = encoder_get_angle();
 
     //read and filter current
-    telem.current = current_sensor_get_latest_isr();
+    telem.current_sens_adc_volts = current_sensor_get_volts();
+    telem.current = current_sensor_get_current();
     telem.filtered_current = current_filt_ewa(telem.current);
 
     //read and filter velocity

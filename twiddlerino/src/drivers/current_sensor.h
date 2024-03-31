@@ -30,18 +30,9 @@
  */
 void current_sensor_init();
 
-/**
- * @brief Returns latest current read in amps
- *
- */
-double current_sensor_get_latest();
+double current_sensor_get_volts();
 
-/**
- * @brief Returns latest current read in amps
- *        This can be called from an isr
- *
- */
-double current_sensor_get_latest_isr();
+double current_sensor_get_current();
 
 /**
  * @brief Returns samples per second rate of sensor ADC

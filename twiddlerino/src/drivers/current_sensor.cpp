@@ -30,9 +30,11 @@
 /*            P R I V A T E  F U N C T I O N  P R O T O T Y P E S             */
 /******************************************************************************/
 
+//read adc voltage and convert to current in amps
+//applies scaling, and offset
 double ads_read();
 
-void zero_measurement();
+double get_latest();
 
 void TaskReadCurrentSensor(void *pvParameters);
 
@@ -46,7 +48,7 @@ static Adafruit_ADS1115 ads;
 //freertos current sensor read task
 static TaskHandle_t xCurrentSensTask;
 
-static double latest_reading = 0.0;
+static double latest_reading = 0.0; // in amps
 static bool zeroed_on_startup = false;
 static double zero = 0.0;
 
@@ -75,7 +77,7 @@ void current_sensor_init() {
   ads.setDataRate(RATE_ADS1115_860SPS);
   ads.startADCReading(MUX_BY_CHANNEL[0], true);
   latest_reading = 0.0;
-  zero_measurement();
+  zeroed_on_startup = false;
 
   xTaskCreatePinnedToCore(
     TaskReadCurrentSensor
@@ -88,19 +90,12 @@ void current_sensor_init() {
   );
 }
 
-double current_sensor_get_latest() {
-  xSemaphoreTake(xSensMutex, portMAX_DELAY);
-  auto sens = latest_reading;
-  xSemaphoreGive(xSensMutex);
-  return sens;
+double current_sensor_get_volts() {
+  return (get_latest() + zero);
 }
 
-double current_sensor_get_latest_isr() {
-  BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-  xSemaphoreTakeFromISR(xSensMutex, &xHigherPriorityTaskWoken);
-  auto sens = latest_reading;
-  xSemaphoreGiveFromISR(xSensMutex, &xHigherPriorityTaskWoken);
-  return sens;
+double current_sensor_get_current() {
+  return ((get_latest() + zero) - CURRENT_SENS_V_OFFSET)/CURRENT_SENS_VOLTS_PER_AMP;
 }
 
 uint16_t current_sensor_sps() {
@@ -111,20 +106,33 @@ uint16_t current_sensor_sps() {
 /*                      P R I V A T E  F U N C T I O N S                      */
 /******************************************************************************/
 
+double get_latest() {
+  if (xPortInIsrContext()) {
+    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+    xSemaphoreTakeFromISR(xSensMutex, &xHigherPriorityTaskWoken);
+    auto sens = latest_reading;
+    xSemaphoreGiveFromISR(xSensMutex, &xHigherPriorityTaskWoken);
+    return sens;
+  } else {
+    xSemaphoreTake(xSensMutex, portMAX_DELAY);
+    auto sens = latest_reading;
+    xSemaphoreGive(xSensMutex);
+    return sens;
+  }
+}
+
 double ads_read(){
-  return (ads.computeVolts(ads.getLastConversionResults()) - CURRENT_SENS_V_OFFSET + zero);
+  return ads.computeVolts(ads.getLastConversionResults());
 }
 
 void TaskReadCurrentSensor(void *pvParameters) {
   for(;;) 
   {
     latest_reading = ads_read();
+    if (!zeroed_on_startup) {
+        zero = latest_reading;
+        zeroed_on_startup = true;
+    }
     vTaskDelay( 0 );
   }
-}
-
-void zero_measurement() {
-  zero = 0.0;
-  zero = ads_read();
-  zeroed_on_startup = true;
 }

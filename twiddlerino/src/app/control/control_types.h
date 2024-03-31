@@ -95,6 +95,7 @@ typedef struct {
     double position; //position in deg
     double velocity; //velocity in rpm
     double filtered_velocity; //low pass filtered velocity
+    double current_sens_adc_volts;
     double current; //in amps
     double filtered_current; //low pass filtered current
     double torque_net; //net torque

@@ -49,7 +49,8 @@
 #define OUTPUT_SIGNAL_CORRECTION_THRESHOLD 1 //ERROR FROM SETPOINT
 
 //current sensor
-#define CURRENT_SENS_V_OFFSET 2.5
+#define CURRENT_SENS_V_OFFSET 2.5 // adc voltage centered around 2.5
+#define CURRENT_SENS_VOLTS_PER_AMP 0.136 //mV/Amp sensitivity on the hall effect sensor
 
 //macro for struct (partial) init to fill out default controller parameters
 //CHANGE CONTROLLER DEFAULT CONFIG HERE!!!!
