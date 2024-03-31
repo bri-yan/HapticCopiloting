@@ -25,6 +25,7 @@
 //current sensor (communicates through i2c interface)
 #define PIN_CURRENT_SENS_ADC_SCL  gpio_num_t::GPIO_NUM_22
 #define PIN_CURRENT_SENS_ADC_SDA  gpio_num_t::GPIO_NUM_21
+#define PIN_CURRENT_SENS_ADC_ALERT gpio_num_t::GPIO_NUM_19
 
 //motor
 #define PIN_MOTOR_POWER     gpio_num_t::GPIO_NUM_16  //motor power (pwm) signal
