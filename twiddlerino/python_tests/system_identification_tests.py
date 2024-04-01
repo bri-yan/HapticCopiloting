@@ -73,7 +73,7 @@ async def current_step_response_test(twid:TwidSerialInterfaceProtocol):
         #apply curve fitting to get second order params using scipy
         #here we are curve fitting to a second order transfer function with dead time
         #has an initial guess of [2, 2, 1.5, 1, 0]
-        [K, tau, zeta, theta, y0], _ = scipy.optimize.curve_fit(sopdt, dataseries['ts'], dataseries['current'], [2, 2, 1.5, 1, 0])
+        [K, tau, zeta, theta, y0], _ = scipy.optimize.curve_fit(sopdt, dataseries['ts'], dataseries['current'], [2, 2, 1.5, 0, 0])
         output_str = f'Step response estimated second order parameters:\n\
             K:{K}\ttau;{tau}\tzeta:{zeta}\ttheta{theta}\ty0:{y0}\n'
         print(output_str)
