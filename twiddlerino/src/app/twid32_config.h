@@ -23,7 +23,7 @@
 
 //command and telemetry config
 #define ENABLE_DEBUG_TELEMETRY_ON_INIT true
-#define TELEMETRY_QUEUE_SIZE 500U
+#define TELEMETRY_QUEUE_SIZE 250U
 #define COMMAND_QUEUE_SIZE 10U
 #define TELEMETRY_DEFAULT_SAMPLE_RATE 20U //telemetry sample rate in (control loops)/sample
 #define GAME_TELEMETRY_WAIT_MS 20U
@@ -39,7 +39,7 @@
 
 //motor
 #define MOTOR_MAX_SPEED_RPM 10000
-#define MOTOR_PWM_FREQ 32000U
+#define MOTOR_PWM_FREQ 20000U
 #define MOTOR_DUTY_CYCLE_RES_BITS 10U
 #define MOTOR_DUTY_CYCLE_RES 1024
 
