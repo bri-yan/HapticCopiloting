@@ -239,11 +239,14 @@ async def run_game():
 
         #get the latest telemetry frame
         if not game_interface.frames.empty():
+            offset = -140
             target_position = paths[1].get_target(9, screen)
-            game_interface.update_setpoint(position=target_position, velocity=ships[0].velocity, torque= 0.0)
+            game_interface.update_setpoint(position=target_position, velocity=0.0, torque= 0.0)
             latest_frame: TelemetryFrame = game_interface.frames.get_nowait()
-            right_ship.x = latest_frame.position - right_ship.width//2
-            print(f'frame #: {game_interface.frame_count}, frame: {latest_frame}')
+            right_ship.x = latest_frame.position + offset
+            print(right_ship.x, target_position)
+            # right_ship.x = latest_frame.position - right_ship.width//2
+            # print(f'frame #: {game_interface.frame_count}, frame: {latest_frame}')
 
         # Limit frames per second
         await clock.tick(45)
