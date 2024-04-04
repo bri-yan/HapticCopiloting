@@ -33,6 +33,7 @@
 /******************************************************************************/
 /*               P R I V A T E  G L O B A L  V A R I A B L E S                */
 /******************************************************************************/
+static const char* TAG = "motor";
 
 //motor pwm timer channel
 static const uint8_t motor_pwm_channel = 0;//harware timer channel for pwm signal
@@ -56,6 +57,7 @@ void motor_init(const gpio_num_t motor_power_pin, const gpio_num_t motor_dir0_pi
 
     // MOTOR pins
     pinMode(dir0_pin, OUTPUT);
+    ESP_LOGI(TAG, "Configured motor direction pin as output (gpio pin %i)",dir0_pin);
     // pinMode(dir1_pin, OUTPUT);
 
     //setup motor PWM output on MotorPowerPin
@@ -65,12 +67,15 @@ void motor_init(const gpio_num_t motor_power_pin, const gpio_num_t motor_dir0_pi
     ledcSetup(motor_pwm_channel, MOTOR_PWM_FREQ, MOTOR_DUTY_CYCLE_RES_BITS); //channel 0, 32khz, 8 bit (0-255) duty cycle resolution
     ledcAttachPin(power_pin, motor_pwm_channel);//attack motor power pin to channel 0 timer
     ledcWrite(motor_pwm_channel, 0);//start at duty cycle of 0 (analog voltage ~ 0)
+    ESP_LOGI(TAG, "Configured motor power pin (gpio pin %i) pwm signal on pwm channel %i", power_pin, motor_pwm_channel);
+    ESP_LOGI(TAG, "Configured pwm channel %i to %lu Hz and duty cycle resolution of %i bits", motor_pwm_channel, MOTOR_PWM_FREQ, MOTOR_DUTY_CYCLE_RES_BITS);
 
     motor_set_state(motor_state_t::MOTOR_LOW);
 }
 
 //stop power to motor
 void motor_stop() {
+    ESP_LOGD(TAG,"motor_stop called");
     ledcWrite(motor_pwm_channel, 0);
     ledcDetachPin(power_pin);
     power_pin = GPIO_NUM_NC;
@@ -113,25 +118,25 @@ int32_t motor_set_pwm(int32_t dc)
 
 motor_state_t motor_set_state(motor_state_t state)
 {
+   ESP_LOGD(TAG,"motor_set_state to %i called", state);
    switch(state)
    {
      case motor_state_t::MOTOR_DRIVE_CCW:
        digitalWrite(dir0_pin, HIGH);
-      //  digitalWrite(dir1_pin, LOW);
+       motor_state = state;
        break;
      case motor_state_t::MOTOR_DRIVE_CW:
         digitalWrite(dir0_pin, LOW);
-        // digitalWrite(dir1_pin, HIGH);
+        motor_state = state;
        break;
      case motor_state_t::MOTOR_LOW:
         digitalWrite(dir0_pin, LOW);
         ledcWrite(motor_pwm_channel, 0);
-        // digitalWrite(dir1_pin, LOW);
+        motor_state = state;
         break;
      default:
-        if(Serial.availableForWrite()) {
-            Serial.println("ERROR, incorrect motor direction!");
-        }
+      ESP_LOGE(TAG,"Incorrect motor state passed to motor_set_state (%i)", state);
+      break;
    }
 
    return motor_state;
@@ -141,7 +146,7 @@ void motor_safety_check(double speed) {
   if(speed > MOTOR_MAX_SPEED_RPM || speed < -MOTOR_MAX_SPEED_RPM) {
       motor_set_pwm(0);
       motor_set_state(motor_state_t::MOTOR_LOW);
-      Serial.printf("Motor speed is too fast! %lf deg/s", speed);
+      ESP_LOGW(TAG, "Motor speed is too fast! %lf deg/s", speed);
       esp_system_abort("Aborting! Motor speed is too fast!");
   }
 }

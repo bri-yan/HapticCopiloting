@@ -47,6 +47,7 @@ static void encoder_pcnt_overflow_interrupt_handler(void *arg);
 /******************************************************************************/
 /*               P R I V A T E  G L O B A L  V A R I A B L E S                */
 /******************************************************************************/
+static const char* TAG = "encoder";
 
 // A flag to identify if pcnt isr service has been installed.
 static bool is_pcnt_isr_service_installed = false;
@@ -83,6 +84,7 @@ void encoder_init(pcnt_unit_t unit, gpio_num_t quad_pin_a, gpio_num_t quad_pin_b
     //pins
     pinMode(quad_pin_a, INPUT_PULLUP);
     pinMode(quad_pin_b, INPUT_PULLUP);
+    ESP_LOGD(TAG, "Quaderature GPIO pins initialized");
 
     //config channel 0 counter
     pcnt_config_t dev_config = {
@@ -144,10 +146,11 @@ void encoder_init(pcnt_unit_t unit, gpio_num_t quad_pin_a, gpio_num_t quad_pin_b
     } else {
         pcnt_filter_disable(encoder_pcnt_unit);
     }
-
+    ESP_LOGD(TAG, "Pulse counter peripheral units configured");
     //enable interrupt and resume count
     pcnt_intr_enable(encoder_pcnt_unit);
     pcnt_counter_resume(encoder_pcnt_unit);
+    ESP_LOGD(TAG, "Pulse counter peripheral interrupt enabled and resumed");
 }
 
 void encoder_pause()
@@ -157,6 +160,7 @@ void encoder_pause()
 
 void encoder_terminate()
 {
+    ESP_LOGD(TAG, "encoder_terminate called");
     //disable all things enabled in setup
     pcnt_set_filter_value(encoder_pcnt_unit, 0);
     pcnt_filter_disable(encoder_pcnt_unit);
@@ -179,6 +183,7 @@ void encoder_clear_count()
     pcnt_counter_pause(encoder_pcnt_unit);
     pcnt_counter_clear(encoder_pcnt_unit);
     _ENTER_CRITICAL();
+    ESP_LOGD(TAG, "encoder clear count called (current count: %lli)",encoder_accu_cnt);
     encoder_cnt_velocity = 0.0;
     encoder_cnt_last_velocity = 0.0;
     encoder_accu_cnt = 0;

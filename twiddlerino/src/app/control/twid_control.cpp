@@ -51,6 +51,8 @@ static void pid_callback(void *args);
 /******************************************************************************/
 /*               P R I V A T E  G L O B A L  V A R I A B L E S                */
 /******************************************************************************/
+//logtag
+static const char* TAG = "twid_control";
 
 static portMUX_TYPE spinlock = portMUX_INITIALIZER_UNLOCKED;
 
@@ -66,6 +68,8 @@ static telemetry_t telem;
 static EwmaFilter velocity_filt_ewa(controller_config.velocity_filter_const, 0.0);
 static EwmaFilter current_filt_ewa(controller_config.current_filter_const, 0.0);
 static DiscretePID pid_controller(&controller_config);
+
+static setpoint_buffer_type_t setpoint_buffer;
 
 //pid timer handle
 //https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/system/esp_timer.html
@@ -92,6 +96,8 @@ void tcontrol_cfg(controller_context_t* config) {
     pid_controller = DiscretePID(&controller_config);
     telem.current_sps = current_sensor_sps();
     telem.nframes_sent_queue = 0;
+    config->setpoint_buffer = &setpoint_buffer;
+    config->setpoint_buffer->clear();
 
     const esp_timer_create_args_t timer_args = {
         .callback = pid_callback,
@@ -103,24 +109,21 @@ void tcontrol_cfg(controller_context_t* config) {
         ESP_ERROR_CHECK(esp_timer_create(&timer_args, &pid_timer));
     }
 
-    if(Serial.availableForWrite()){
-        Serial.printf("Controller config complete.\n");
-        print_controller_cfg();
-    }
+    print_controller_cfg();
 }
 
 void tcontrol_start(){
+    ESP_LOGD(TAG, "tcontrol_start called");
     if(!esp_timer_is_active(pid_timer)) {
         last_time = micros();
         start_time = micros();
         ESP_ERROR_CHECK(esp_timer_start_periodic(pid_timer, controller_config.sample_time_us));
-        if(Serial.availableForWrite()){
-            Serial.printf("Controller timer started.\n");
-        }
+        ESP_LOGD(TAG, "Started pid callback timer with period %lu",controller_config.sample_time_us);
     }
 }
 
 void tcontrol_stop(){
+    ESP_LOGD(TAG, "tcontrol_stop called");
     if(esp_timer_is_active(pid_timer)) {
         ESP_ERROR_CHECK(esp_timer_stop(pid_timer));
         if(Serial.availableForWrite()){
@@ -130,12 +133,12 @@ void tcontrol_stop(){
 }
 
 void tcontrol_reset(){
+    ESP_LOGD(TAG, "tcontrol_reset called");
     tcontrol_stop();
     INIT_CONTROLLER_CONFIG_PARTIAL(def);
     def.telem_queue_handle = controller_config.telem_queue_handle;
     def.setpoint_buffer = controller_config.setpoint_buffer;
     controller_config = def;
-    // controller_config.setpoint_buffer->clear();
     tcontrol_cfg(&controller_config);
     tcontrol_start();
 }
@@ -159,6 +162,7 @@ void tcontrol_get_state(telemetry_t* telem_out) {
 void tcontrol_update_setpoint(setpoint_t* tp) {
     _ENTER_CRITICAL();
     setpoint = *tp;
+    ESP_LOGD(TAG, "Updated control setpoint to %lf, %lf, %lf, %lf",setpoint.pos, setpoint.vel, setpoint.accel, setpoint.torque);
     _EXIT_CRITICAL();
 }
 

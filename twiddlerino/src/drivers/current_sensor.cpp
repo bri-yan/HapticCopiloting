@@ -46,6 +46,7 @@ void IRAM_ATTR adc_read_isr();
 /******************************************************************************/
 /*               P R I V A T E  G L O B A L  V A R I A B L E S                */
 /******************************************************************************/
+static const char* TAG = "current_sensor";
 
 //motor pwm timer channel
 static Adafruit_ADS1115 ads;
@@ -70,17 +71,10 @@ void current_sensor_init() {
   //note ads.begin() implicity uses i2c address 72U
   //                and default scl/sda i2c pins gpio 22 (scl) and gpio21 (sda)
 
-  //setup alert pin
-  pinMode(PIN_CURRENT_SENS_ADC_ALERT, INPUT);
-  //read adc on every altert falling edge
-  //https://docs.espressif.com/projects/arduino-esp32/en/latest/api/gpio.html?highlight=pullup#attachinterrupt
-  //https://www.ti.com/lit/ds/symlink/ads1115.pdf?ts=1711845972450&ref_url=https%253A%252F%252Fwww.google.com%252F
-  attachInterrupt(PIN_CURRENT_SENS_ADC_ALERT, adc_read_isr, FALLING);
-
   xSemaphoreTake(xSensMutex, portMAX_DELAY);
   if (!ads.begin()) {
     if (Serial && Serial.availableForWrite()) {
-      Serial.printf("Current Sensor: Failed to init ADS115.\n");
+      ESP_LOGW(TAG, "Current Sensor: Failed to init ADS115.\n");
     }
   }
 
@@ -88,7 +82,7 @@ void current_sensor_init() {
   i2cSetClock(0, 400000U);
   uint32_t freq = 0;
   i2cGetClock(0, &freq);
-  Serial.printf("[current_sensor_init] i2c frequency: %lu\n", freq);
+  ESP_LOGI(TAG, "i2c frequency: %lu\n", freq);
 
   ads.setDataRate(RATE_ADS1115_860SPS);
   ads.startADCReading(MUX_BY_CHANNEL[0], true);
@@ -96,15 +90,15 @@ void current_sensor_init() {
   latest_reading = 0.0;
   xSemaphoreGive(xSensMutex);
 
-  // xTaskCreatePinnedToCore(
-  //   TaskReadCurrentSensor
-  //   ,  "Current_Sensor_Read_Task"
-  //   ,  8192
-  //   ,  NULL
-  //   ,  TASK_PRIORITY_SENSOR
-  //   ,  &xCurrentSensTask
-  //   ,  CORE_SENSOR_TASK
-  // );
+  xTaskCreatePinnedToCore(
+    TaskReadCurrentSensor
+    ,  "Current_Sensor_Read_Task"
+    ,  8192
+    ,  NULL
+    ,  TASK_PRIORITY_SENSOR
+    ,  &xCurrentSensTask
+    ,  CORE_SENSOR_TASK
+  );
 }
 
 double current_sensor_get_volts() {
@@ -157,6 +151,7 @@ void IRAM_ATTR adc_read_isr() {
 }
 
 void TaskReadCurrentSensor(void *pvParameters) {
+  ESP_LOGI(TAG, "TaskReadCurrentSensor started");
   for(;;) 
   {
     latest_reading = ads_read();

@@ -39,8 +39,8 @@ TELEMETRY_FRAME_LENGTH = 29
 _LOG_NAME = 'TWIDDLERINO_SERIAL'
 _LOG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..','data','logs')
 _LOG_FILE = os.path.join(_LOG_DIR, f'{_LOG_NAME}_{time.strftime('%Y-%m-%d_%H-%M-%S')}.log')
-_TELEM_LOG_FILE = os.path.join(_LOG_DIR, f'telemetry_{time.strftime('%Y-%m-%d_%H-%M-%S')}.log')
-_CMD_LOG_FILE = os.path.join(_LOG_DIR, f'command_{time.strftime('%Y-%m-%d_%H-%M-%S')}.log')
+_TELEM_LOG_FILE = os.path.join(_LOG_DIR, f'telemetry_frame_{time.strftime('%Y-%m-%d_%H-%M-%S')}.log')
+_SERIALDEBUG_LOG_FILE = os.path.join(_LOG_DIR, f'serial_debug_dump_{time.strftime('%Y-%m-%d_%H-%M-%S')}.log')
 
 #python copy of control_type_t in esp32 firmware
 class ControlType(Enum):
@@ -185,6 +185,12 @@ class TwidSerialInterfaceProtocol(asyncio.Protocol):
         self._telem_logger = logging.getLogger(f'{_LOG_NAME}_TELEMETRY')
         self._telem_logger.setLevel(logging.DEBUG)
         self._telem_logger.addHandler(tfh)
+
+        tfh = logging.FileHandler(_SERIALDEBUG_LOG_FILE)
+        tfh.setFormatter(logging.Formatter('%(asctime)s,%(msecs)d %(message)s','%H:%M:%S'))
+        self._serial_dump_logger = logging.getLogger(f'{_LOG_NAME}_DUMP')
+        self._serial_dump_logger.setLevel(logging.DEBUG)
+        self._serial_dump_logger.addHandler(tfh)
         
         self._logger.info(f'{TwidSerialInterfaceProtocol.__name__} __init__ called')
 
@@ -200,8 +206,8 @@ class TwidSerialInterfaceProtocol(asyncio.Protocol):
         self.socket_write_buffer:queue.Queue = queue.Queue(1000)
         self.transport = transport
         self.transport.resume_reading()
-        print('port opened', transport)
         self._conn_flag.set()
+        self._logger.info(f'port opened {transport}')
     
     def connection_lost(self, exc):
         self._logger.info(f'{TwidSerialInterfaceProtocol.__name__} connection lost')
@@ -277,7 +283,8 @@ class TwidSerialInterfaceProtocol(asyncio.Protocol):
                                 self._logger.debug(f'set wait_for_param_flag flag @ {self._wait_for_param_flag}')
                         
                         processed = True
-            if not processed:
+            if not processed and len(line) > 1:
+                self._serial_dump_logger.debug(line)
                 if i < len(data_lines) - 1:
                     self.buffer += line + b'\n'
                 else:

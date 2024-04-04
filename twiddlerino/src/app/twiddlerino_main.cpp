@@ -52,12 +52,12 @@ void TaskReadTCommands(void *pvParameters);
 /******************************************************************************/
 /*               P R I V A T E  G L O B A L  V A R I A B L E S                */
 /******************************************************************************/
+static const char* TAG = "twiddlerino_main";
 
 static QueueHandle_t xQueueTelemetry;
 static TaskHandle_t xTelemTask;
 static TaskHandle_t xCommandTask;
 static TaskHandle_t xTControlTask;
-static setpoint_buffer_type_t setpoint_buffer;
 
 static bool enable_debug_telemetry = ENABLE_DEBUG_TELEMETRY_ON_INIT;
 
@@ -74,7 +74,7 @@ static bool enable_debug_telemetry = ENABLE_DEBUG_TELEMETRY_ON_INIT;
 void twiddlerino_setup(startup_type_t startup_type) {
   if(!Serial) {
     Serial.begin( UART_BAUD_RATE );//this is on rx0 tx0
-    Serial.printf( "Serial connected on uart0! with baud rate %lu\n",UART_BAUD_RATE);
+    ESP_LOGI(TAG, "Serial connected on uart0! with baud rate %lu\n",UART_BAUD_RATE);
   }
 
   //queues for communicating with the control core
@@ -82,12 +82,12 @@ void twiddlerino_setup(startup_type_t startup_type) {
 
   //after this , if we want to idle dont run any tasks
   if (startup_type == startup_type_t::IDLE) {
-    Serial.println("Entering idle mode");
+    ESP_LOGI(TAG, "Entering idle mode");
     return;
   }
 
   //hardware setup
-  Serial.printf("Hardware setup started.\n");
+  ESP_LOGI(TAG, "Hardware setup started");
   current_sensor_init();
   encoder_init(pcnt_unit_t::PCNT_UNIT_0, PIN_ENCODER_QUAD_A, PIN_ENCODER_QUAD_B, ENCODER_DEFAULT_FILTER);
   motor_init(PIN_MOTOR_POWER, PIN_MOTOR_DIR_0, PIN_MOTOR_DIR_1);
@@ -104,7 +104,7 @@ void twiddlerino_setup(startup_type_t startup_type) {
     , &xCommandTask
     , CORE_SERIAL_READ_TASK
   );
-  Serial.printf("Parameter Update Task Initialized. Waiting for param update commands. Task Status: %i\n",eTaskGetState(xCommandTask));
+  ESP_LOGI(TAG, "Parameter Update Task Initialized. Waiting for param update commands. Task Status: %i\n",eTaskGetState(xCommandTask));
 
   //start telemetry on core 0
   xTaskCreatePinnedToCore(
@@ -116,7 +116,7 @@ void twiddlerino_setup(startup_type_t startup_type) {
     , &xTelemTask
     , CORE_SERIAL_WRITE_TASK
   );
-  Serial.printf("Telemetry Task Initialized. Task Status: %i\n",eTaskGetState(xTelemTask));
+  ESP_LOGI(TAG, "Telemetry Task Initialized. Task Status: %i\n",eTaskGetState(xTelemTask));
   
   if (startup_type == startup_type_t::RUN_CONTROLLER_DEFAULT) {
     //start task
@@ -139,7 +139,7 @@ void twiddlerino_setup(startup_type_t startup_type) {
 void TaskPublishTelemetry(void *pvParameters) {
   if(!Serial) {
     Serial.begin( UART_BAUD_RATE );
-    Serial.println( "Serial connected on uart0!" );
+    ESP_LOGI(TAG, "Serial connected on uart0!" );
   }
 
   telemetry_t t;
@@ -156,21 +156,20 @@ void TaskPublishTelemetry(void *pvParameters) {
 void TaskRunTControl(void *pvParameters){
   if(!Serial) {
     Serial.begin( UART_BAUD_RATE );//this is on rx0 tx0
-    Serial.println( "Serial connected on uart0!" );
+    ESP_LOGI(TAG, "Serial connected on uart0!" );
   }
   INIT_CONTROLLER_CONFIG_PARTIAL(control_config);
   control_config.telem_queue_handle = &xQueueTelemetry;
-  control_config.setpoint_buffer = &setpoint_buffer;
   auto mutex = xSemaphoreCreateMutex();
   control_config.buffer_mutex = &mutex;
-  Serial.printf("T Control Task Initialized.\n");
+  ESP_LOGI(TAG, "T Control Task Initialized.\n");
 
   //initial hardware state
   encoder_clear_count();
   motor_set_state(motor_state_t::MOTOR_LOW);
   tcontrol_cfg(&control_config);
   tcontrol_start();
-  Serial.printf("Controller runnning: %i\n",tcontrol_is_running());
+  ESP_LOGI(TAG, "Controller runnning: %i\n",tcontrol_is_running());
 
   for(;;)
   {
@@ -181,11 +180,11 @@ void TaskRunTControl(void *pvParameters){
 void TaskReadTCommands(void *pvParameters) {
   if(!Serial) {
     Serial.begin( UART_BAUD_RATE );//this is on rx0 tx0
-    Serial.println( "Serial connected on uart0!" );
+    ESP_LOGI(TAG, "Serial connected on uart0!" );
   }
 
   String read_string;
-  Serial.printf("Update Control Params Task Started\n");
+  ESP_LOGI(TAG, "Update Control Params Task Started\n");
   cmd_type_t last_cmd = NA_CMD;
 
   for(;;) 
@@ -198,8 +197,7 @@ void TaskReadTCommands(void *pvParameters) {
     if( Serial.available()) {
       read_string = read_string_until('\n');
       last_cmd = cmd_type_t::NA_CMD;
-      //for logging purposes
-      //Serial.printf("Received data: %s\n", read_string);
+      ESP_LOGD(TAG, "Received data: %s\n", read_string);
 
      if(read_string == "STOP" || read_string == "stop"){
         motor_fast_stop();
@@ -233,7 +231,7 @@ void TaskReadTCommands(void *pvParameters) {
         sp.torque = vals[3];
 
         tcontrol_update_setpoint(&sp);
-        Serial.printf("Setpoint updated.\n");
+        ESP_LOGD(TAG, "Setpoint updated.\n");
         last_cmd = cmd_type_t::SET_SETPOINT;
       } else if(read_string.substring(0,13) == "set_dutycycle") {
           int16_t i0 = read_string.indexOf(',',0);
@@ -241,7 +239,7 @@ void TaskReadTCommands(void *pvParameters) {
           int16_t i = read_string.indexOf(',',i0);
           int32_t dc = read_string.substring(i0,i).toInt();
           motor_set_pwm(dc);
-          Serial.printf("Set pwm duty cycle to %li with frequency %lu.\nMotor State: %i.\n",
+          ESP_LOGD(TAG, "Set pwm duty cycle to %li with frequency %lu.\nMotor State: %i.\n",
           motor_get_duty_cycle(), motor_get_frequency(), motor_get_state());
           last_cmd = cmd_type_t::SET_DUTYCYCLE;
       } else {
@@ -250,10 +248,8 @@ void TaskReadTCommands(void *pvParameters) {
         last_cmd = decode_config_cmd(&read_string, &cfg);
         if(last_cmd>0){
           tcontrol_update_cfg(&cfg);
-          Serial.printf("Controller config updated.\n");
+          ESP_LOGD(TAG, "Controller config updated.\n");
         }
-
-        // print_controller_cfg();
       }
 
       ack_cmd(last_cmd);
