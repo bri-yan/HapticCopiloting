@@ -41,6 +41,6 @@ async def test(twid:TwidSerialInterfaceProtocol):
     out = await twid.collect_telem()
     print(len(out))
     
-    await twid.end_test()
+    await twid.end()
 
 run_test(SERIAL_PORT, SERIAL_BAUD_RATE, test)

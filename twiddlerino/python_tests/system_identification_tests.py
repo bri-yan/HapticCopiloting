@@ -33,14 +33,14 @@ SERIAL_BAUD_RATE = 1000000
 PWM_AMPLITUDE = 12
 DC_STEPS = [128, 256, 512, 1024]
 
-DATA_DIR_PATH = os.path.join(os.getcwd(),'data')
+DATA_DIR_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)),'data')
 
 #second order model
 def so_model(x,K,wn,zeta):
     return scipy.signal.lti([K],[1, 2*wn*zeta, wn**2]).step(T=x)[1]
 
 async def current_step_response_test(twid:TwidSerialInterfaceProtocol):
-    await twid.update_telem_sample_rate(20)
+    await twid.update_telem_sample_rate(5)
     await twid.update_control_type(ControlType.NO_CTRL)
     await twid.wait_for_param('control_type', ControlType.NO_CTRL)
 
@@ -51,24 +51,15 @@ async def current_step_response_test(twid:TwidSerialInterfaceProtocol):
     for step_input in DC_STEPS:
         await twid.update_dutycycle(step_input)
         #collect all data for next 5 seconds
-        data = await twid.collect_telem(5)
+        dataseries = await twid.collect_telem(5)
+        print(dataseries)
         #stop motor
         await twid.motor_stop()
         #sleep for 1 sec to give motor time to settle down
         await asyncio.sleep(1.0)
-    
-        #extract time and data arrays
-        dataseries = {'ts':[], 'current':[], 'dc':[]}
-        start_ms = data[0].timestamp_ms
-        for t in data:
-            dataseries['dc'].append(t.pwm_duty_cycle)
-            dataseries['ts'].append(t.timestamp_ms - start_ms)
-            dataseries['current'].append(t.filtered_current)
-        for key in dataseries.keys():
-            dataseries[key] = np.array(dataseries[key])
         
         #save as a nice csv using pandas
-        pandas.DataFrame(dataseries).to_csv(os.path.join(DATA_DIR_PATH,f'current_step_response_{step_input}.csv'), index=False)
+        dataseries.to_csv(os.path.join(DATA_DIR_PATH,f'current_step_response_{step_input}.csv'), index=False)
 
         #collect info from start of step only
         dataseries['ts'] = dataseries['ts'][dataseries['dc'] >= step_input]
@@ -96,7 +87,7 @@ async def current_step_response_test(twid:TwidSerialInterfaceProtocol):
         plt.savefig(os.path.join(DATA_DIR_PATH,f'step_resp_fit_{step_input}.png'))
         plt.close()
 
-    await twid.end_test()
+    await twid.end()
     
 async def position_step_response_test(twid:TwidSerialInterfaceProtocol):
     pass

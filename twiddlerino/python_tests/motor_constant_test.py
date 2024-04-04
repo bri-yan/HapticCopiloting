@@ -40,7 +40,7 @@ async def test(twid:TwidSerialInterfaceProtocol):
         data['current'].append(twid.last_frame.current)
         data['vel_filtered'].append(twid.last_frame.filtered_velocity)
         print(f'progress:{i/dcspan.size*100:.2f} %\tdc:{data['dc'][-1]}\tamps:{data['current'][-1]}\trpm:{data['vel_filtered'][-1]}')
-    await twid.end_test()
+    await twid.end()
 
     volts = np.array(data['volts_approx'])
     current = np.array(data['current'])

@@ -28,6 +28,8 @@ import time
 
 import os
 
+import pandas
+
 #external gui socket address
 SERIAL_STUDIO_HOST = '127.0.0.1'
 SERIAL_STUDIO_PORT = 15555
@@ -364,11 +366,14 @@ class TwidSerialInterfaceProtocol(asyncio.Protocol):
     
     #collect telemetry for defined duration +/- 1ms and return a list of collected telemetry
     #this is a awaitable function
-    async def collect_telem(self, duration=1) -> list[TelemetryFrame]:
-        out = []
+    #set collect_old_buffer to true if you want to get all the frames currently in buffer
+    # otherwise buffer is cleared
+    async def collect_telem(self, duration=1, collect_old_buffer=False) -> pandas.DataFrame:
+        out :list[TelemetryFrame] = []
         with self.frames.mutex:
-            out = list(self.frames.queue)
-            self._logger.debug(f'copied over {len(out)} items from frame queue to output list of collect_telem')
+            if collect_old_buffer:
+                out = list(self.frames.queue)
+                self._logger.debug(f'copied over {len(out)} items from frame queue to output list of collect_telem')
             self.frames.queue.clear()
             self._logger.warn(f'cleared frame queue')
         start = time.time()
@@ -380,13 +385,31 @@ class TwidSerialInterfaceProtocol(asyncio.Protocol):
             await asyncio.sleep(1e-3)
         
         self._logger.debug(f'collected {len(out)} telemetry frames during {duration}s interval')
-        return out
-  
-    async def end_test(self):
+        
+        out_dict = {}
+        for t in out:
+            for attr_name in self.datafields:
+                if attr_name in out_dict.keys():
+                    out_dict[attr_name].append(getattr(t, attr_name))
+                else:
+                    out_dict[attr_name] = []
+        out_dataframe = pandas.DataFrame(out_dict)
+    
+        return out_dataframe
+    
+    def clear_frames(self):
+        cnt = self.frames.qsize()
+        with self.frames.mutex:
+            self.frames.queue.clear()
+        self._logger.warn(f'cleared {cnt} items from frame queue')
+
+    async def end(self):
         await self.motor_stop()
         await self.esp32_reboot()
         self._stop_flag.set()
-        self._logger.info(f'end_test called')
+        self.transport.close()
+        self._logger.info(f'end called')
+        self.__del__()
 
     async def control_stop(self):
         return await self.send_cmd(bytes(f'stop\n',"utf-8"), CommandType.STOP)
@@ -437,12 +460,12 @@ async def run_socket_server_async(twid:TwidSerialInterfaceProtocol, delay=0):
     server.setblocking(False)
     loop = twid._loop
     client = None
-    print('Waiting to accept new socket connection.')
+    twid._logger.debug('[socket_server] Waiting to accept new socket connection.')
     while not twid._stop_flag.is_set():
         if client is None:
             try:
                 client, _ = await asyncio.wait_for(loop.sock_accept(server), 0.01)
-                print(f'Socket connection re-established on {client.getsockname()}')
+                twid._logger.debug(f'[socket_server] Socket connection re-established on {client.getsockname()}')
             except:
                 pass
         else:
@@ -467,7 +490,7 @@ async def run_socket_server_async(twid:TwidSerialInterfaceProtocol, delay=0):
     if client is not None:
         client.close()
     server.close()
-    print('Socket closed.')
+    twid._logger.debug('[socket_server] Socket closed.')
     
 async def start_protocol(loop, serial_port, baud_rate) -> TwidSerialInterfaceProtocol:
     _, twid = await serial_asyncio.create_serial_connection(loop, TwidSerialInterfaceProtocol, serial_port, baudrate=baud_rate)
@@ -477,4 +500,5 @@ async def start_protocol(loop, serial_port, baud_rate) -> TwidSerialInterfacePro
 def run_test(serial_port, baud_rate, *args):
     loop = asyncio.get_event_loop()
     twid = loop.run_until_complete(start_protocol(loop,serial_port,baud_rate))
+    twid._logger.info(f'running functions test(s):\t {[arg.__name__ for arg in args]}')
     loop.run_until_complete(asyncio.gather(run_socket_server_async(twid), *[arg(twid) for arg in args]))

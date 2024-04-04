@@ -28,6 +28,6 @@ async def ref_track_test(twid:TwidSerialInterfaceProtocol):
     
     await asyncio.sleep(5)
 
-    await twid.end_test()
+    await twid.end()
     
 run_test(SERIAL_PORT, SERIAL_BAUD_RATE, ref_track_test)
