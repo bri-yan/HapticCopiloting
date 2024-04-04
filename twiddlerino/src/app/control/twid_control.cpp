@@ -55,7 +55,7 @@ static void pid_callback(void *args);
 static portMUX_TYPE spinlock = portMUX_INITIALIZER_UNLOCKED;
 
 //controller information to be passed to callback function
-INIT_CONTROLLER_CONFIG(controller_config);
+INIT_CONTROLLER_CONFIG_PARTIAL(controller_config);
 static setpoint_t setpoint = {.pos = 0.0, .vel =0.0, .accel = 0.0, .torque = 0.0};
 static uint32_t last_time = 0; //last loop timestamp us
 static uint32_t start_time = 0; //start timestamp us
@@ -75,7 +75,7 @@ static esp_timer_handle_t pid_timer;
 /*                       P U B L I C  F U N C T I O N S                       */
 /******************************************************************************/
 
-void tcontrol_cfg(controller_config_t* config) {
+void tcontrol_cfg(controller_context_t* config) {
     if(tcontrol_is_running()){
         tcontrol_stop();
     }
@@ -131,9 +131,11 @@ void tcontrol_stop(){
 
 void tcontrol_reset(){
     tcontrol_stop();
-    INIT_CONTROLLER_CONFIG(def);
+    INIT_CONTROLLER_CONFIG_PARTIAL(def);
     def.telem_queue_handle = controller_config.telem_queue_handle;
+    def.setpoint_buffer = controller_config.setpoint_buffer;
     controller_config = def;
+    // controller_config.setpoint_buffer->clear();
     tcontrol_cfg(&controller_config);
     tcontrol_start();
 }
@@ -142,7 +144,7 @@ bool tcontrol_is_running(){
     return esp_timer_is_active(pid_timer);
 }
 
-void tcontrol_get_cfg(controller_config_t* cfg_out) {
+void tcontrol_get_cfg(controller_context_t* cfg_out) {
     _ENTER_CRITICAL();
     *cfg_out = controller_config;
     _EXIT_CRITICAL();
@@ -160,7 +162,7 @@ void tcontrol_update_setpoint(setpoint_t* tp) {
     _EXIT_CRITICAL();
 }
 
-void tcontrol_update_cfg(controller_config_t* cfg) {
+void tcontrol_update_cfg(controller_context_t* cfg) {
     _ENTER_CRITICAL();
     controller_config.Kp = cfg->Kp;
     controller_config.Ki = cfg->Ki;
@@ -218,6 +220,13 @@ static void pid_callback(void *args)
     auto feedback_signal = 0.0;
     auto output_signal = 0.0;
     auto setpoint_signal = 0.0;
+
+    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+    xSemaphoreTakeFromISR(*controller_config.buffer_mutex, &xHigherPriorityTaskWoken);
+    if (!controller_config.setpoint_buffer->isEmpty()) {
+        setpoint = controller_config.setpoint_buffer->shift();
+    }
+    xSemaphoreGiveFromISR(*controller_config.buffer_mutex, &xHigherPriorityTaskWoken);
 
     //ratio between real (empircal) and desired inertia
     auto jjv = controller_config.motor_J / controller_config.impedance.J;
@@ -323,9 +332,9 @@ static void pid_callback(void *args)
     telem.Kd = controller_config.Kd;
     telem.impedance = controller_config.impedance;
     telem.control_type = controller_config.control_type;
-
+    
     if((itr % controller_config.telemetry_sample_rate) == 0 && controller_config.telem_queue_handle != NULL) {
-        BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+        xHigherPriorityTaskWoken = pdFALSE;
         telem.nframes_sent_queue+=1;
         xQueueSendFromISR(*controller_config.telem_queue_handle, &telem, &xHigherPriorityTaskWoken);
     }
@@ -355,7 +364,7 @@ DiscretePID::DiscretePID::DiscretePID(double kp, double ki, double kd, double h,
     reinit();
 }
 
-DiscretePID::DiscretePID(controller_config_t* cfg) {
+DiscretePID::DiscretePID(controller_context_t* cfg) {
     this->N = cfg->N;
     this->Kp = cfg->Kp;
     this->Ki = cfg->Ki;
@@ -374,7 +383,7 @@ void DiscretePID::reinit() {
     integral_sum = 0.0;
 }
 
-void DiscretePID::set_all_params(controller_config_t* cfg) {
+void DiscretePID::set_all_params(controller_context_t* cfg) {
     this->direction = cfg->controller_direction;
     this->N = cfg->N;
     this->Kp = cfg->Kp;

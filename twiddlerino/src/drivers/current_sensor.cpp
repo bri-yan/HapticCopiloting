@@ -108,11 +108,11 @@ void current_sensor_init() {
 }
 
 double current_sensor_get_volts() {
-  return (get_latest() + zero - CURRENT_SENS_V_OFFSET);
+  return (get_latest() - zero);
 }
 
 double current_sensor_get_current() {
-  return (get_latest() + zero - CURRENT_SENS_V_OFFSET)/CURRENT_SENS_VOLTS_PER_AMP;
+  return (get_latest() - zero)/CURRENT_SENS_VOLTS_PER_AMP;
 }
 
 uint16_t current_sensor_sps() {

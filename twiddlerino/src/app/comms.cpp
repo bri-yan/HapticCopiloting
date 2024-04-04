@@ -38,6 +38,8 @@
 
 static char timed_read();
 
+static void insert_setpoint_buffer(cmd_type_t cmd, String * str, setpoint_buffer_type_t* buffer, SemaphoreHandle_t* mutex, uint16_t num_values);
+
 /******************************************************************************/
 /*               P R I V A T E  G L O B A L  V A R I A B L E S                */
 /******************************************************************************/
@@ -48,7 +50,7 @@ static uint32_t nframes_sent_serial = 0;
 /*                       P U B L I C  F U N C T I O N S                       */
 /******************************************************************************/
 
-cmd_type_t decode_config_cmd(String *str, controller_config_t *cfg) {
+cmd_type_t decode_config_cmd(String *str, controller_context_t *cfg) {
     if(str->substring(0,7).compareTo("set_pid") == 0){
         double vals[3] = {0.0 ,0.0, 0.0};
         extract_doubles(str, vals, 3);
@@ -103,6 +105,33 @@ cmd_type_t decode_config_cmd(String *str, controller_config_t *cfg) {
             cfg->telemetry_sample_rate = (uint32_t)vals[0];
             return cmd_type_t::SET_TELEMSAMPLERATE;
         }
+    } else if(str->substring(0,17) == "set_multisetpoint") {
+        int16_t i0 = str->indexOf(',',0);
+        i0+=1;
+        int16_t i = str->indexOf(',',i0);
+        auto name = str->substring(i0,i);
+
+        auto cmd = cmd_type_t::NA_CMD;
+        Serial.printf("%s",name);
+        if (name=="position") {
+            cmd = cmd_type_t::SET_MULTISETPOINT_POSITION;
+        } else if (name=="velocity") {
+            cmd = cmd_type_t::SET_MULTISETPOINT_VELOCITY;
+        } else if (name=="acceleration") {
+            cmd = cmd_type_t::SET_MULTISETPOINT_ACCELERATION;
+        } else if (name=="torque") {
+            cmd = cmd_type_t::SET_MULTISETPOINT_TORQUE;
+        }
+
+        if (cmd >= cmd_type_t::SET_MULTISETPOINT_POSITION && cmd <= cmd_type_t::SET_MULTISETPOINT_TORQUE ) {
+            i0 = i+1;
+            i = str->indexOf(',',i0);
+            auto num_vals = (uint32_t)str->substring(i0,i).toInt();
+            auto vals = str->substring(i);
+            insert_setpoint_buffer(cmd, &vals, cfg->setpoint_buffer, cfg->buffer_mutex, num_vals);
+        }
+
+        return cmd;
     }
 
     return cmd_type_t::NA_CMD;
@@ -145,7 +174,7 @@ uint32_t print_controller_cfg() {
     uint32_t size = 0;
 
     if(Serial) {
-        controller_config_t cfg;
+        controller_context_t cfg;
         tcontrol_get_cfg(&cfg);
         size = Serial.printf("################\nCONTROLLER CONFIGURATION:\n*control_type:%i\t*sample_time:%lu us\n*Kp:%lf\t*Ki:%lf\t*Kd:%lf\n*stiffness:%lf\t*damping:%lf\t*intertia:%lf\n################\n",
         cfg.control_type, cfg.sample_time_us, cfg.Kp, cfg.Ki, cfg.Kd, cfg.impedance.K, cfg.impedance.B, cfg.impedance.J);
@@ -176,6 +205,47 @@ void extract_doubles(String * str, double* out, uint16_t num_values) {
         out[j] = str->substring(i0,i).toDouble();
         i++;
     }
+}
+
+static void insert_setpoint_buffer(cmd_type_t cmd, String * str, 
+setpoint_buffer_type_t* buffer, SemaphoreHandle_t* mutex, uint16_t num_values) {
+    int32_t i = 0, i0 = 0;
+    for(int j = 0; j < num_values; j++) {
+        i0 = str->indexOf(",",i0);
+        i0++;
+        i = str->indexOf(",",i0);
+        if (i < 0) {
+            i = str->length() - 1;
+        }
+
+        auto val = str->substring(i0,i).toDouble();
+        setpoint_t sp = {.pos = 0, .vel = 0, .accel = 0, .torque = 0};
+
+        switch(cmd) {
+            case cmd_type_t::SET_MULTISETPOINT_POSITION :
+                sp.pos = val;
+                break;
+            case cmd_type_t::SET_MULTISETPOINT_VELOCITY:
+                sp.vel = val;
+                break;
+            case cmd_type_t::SET_MULTISETPOINT_ACCELERATION:
+                sp.accel = val;
+                break;
+            case cmd_type_t::SET_MULTISETPOINT_TORQUE:
+                sp.torque = val;
+                break;
+            default:
+                return;
+        }
+        xSemaphoreTake(*mutex, portMAX_DELAY);
+        buffer->push(sp);
+        xSemaphoreGive(*mutex);
+        i++;
+    }
+
+    xSemaphoreTake(*mutex, portMAX_DELAY);
+    Serial.printf("Setpoint buffer updated: %i",buffer->size());
+    xSemaphoreGive(*mutex);
 }
 
 void reset_sent_count() {

@@ -57,6 +57,7 @@ static QueueHandle_t xQueueTelemetry;
 static TaskHandle_t xTelemTask;
 static TaskHandle_t xCommandTask;
 static TaskHandle_t xTControlTask;
+static setpoint_buffer_type_t setpoint_buffer;
 
 static bool enable_debug_telemetry = ENABLE_DEBUG_TELEMETRY_ON_INIT;
 
@@ -157,8 +158,11 @@ void TaskRunTControl(void *pvParameters){
     Serial.begin( UART_BAUD_RATE );//this is on rx0 tx0
     Serial.println( "Serial connected on uart0!" );
   }
-  INIT_CONTROLLER_CONFIG(control_config);
+  INIT_CONTROLLER_CONFIG_PARTIAL(control_config);
   control_config.telem_queue_handle = &xQueueTelemetry;
+  control_config.setpoint_buffer = &setpoint_buffer;
+  auto mutex = xSemaphoreCreateMutex();
+  control_config.buffer_mutex = &mutex;
   Serial.printf("T Control Task Initialized.\n");
 
   //initial hardware state
@@ -186,6 +190,10 @@ void TaskReadTCommands(void *pvParameters) {
 
   for(;;) 
   {
+    if (!Serial) {
+      Serial.end();
+      Serial.begin( UART_BAUD_RATE );
+    }
     //check if any new bytes received in uart buffer
     if( Serial.available()) {
       read_string = read_string_until('\n');
@@ -237,7 +245,7 @@ void TaskReadTCommands(void *pvParameters) {
           motor_get_duty_cycle(), motor_get_frequency(), motor_get_state());
           last_cmd = cmd_type_t::SET_DUTYCYCLE;
       } else {
-        controller_config_t cfg;
+        controller_context_t cfg;
         tcontrol_get_cfg(&cfg);
         last_cmd = decode_config_cmd(&read_string, &cfg);
         if(last_cmd>0){

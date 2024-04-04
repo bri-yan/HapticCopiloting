@@ -23,7 +23,7 @@
 
 //configure controller and timer isr
 //this function must be run before tcontrol_start or an error will be thrown
-void tcontrol_cfg(controller_config_t*);
+void tcontrol_cfg(controller_context_t*);
 
 //starts control timer isr
 void tcontrol_start();
@@ -38,14 +38,14 @@ void tcontrol_reset();
 bool tcontrol_is_running();
 
 //copies config to destination
-void tcontrol_get_cfg(controller_config_t*);
+void tcontrol_get_cfg(controller_context_t*);
 
 //set a new setpoint target
 void tcontrol_update_setpoint(setpoint_t*);
 
 //update existing configuration
 //NOTE!!! this will only update gains for pid, impedance, and control mode for now
-void tcontrol_update_cfg(controller_config_t*);
+void tcontrol_update_cfg(controller_context_t*);
 
 // get the latest controller state (telemetry struct)
 // copies over telemetry to destination
@@ -62,9 +62,9 @@ class DiscretePID {
   public:
     DiscretePID(double kp, double ki, double kd, double h);
     DiscretePID(double kp, double ki, double kd, double h, double N);
-    DiscretePID(controller_config_t* cfg);
+    DiscretePID(controller_context_t* cfg);
     void reinit();
-    void set_all_params(controller_config_t* cfg);
+    void set_all_params(controller_context_t* cfg);
     void set_gains(double kp, double ki, double kd);
     void set_direction(controller_direction_t dir);
     void set_limits(int32_t high, int32_t low);

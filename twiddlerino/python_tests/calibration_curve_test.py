@@ -33,7 +33,7 @@ async def test(twid:TwidSerialInterfaceProtocol):
         frame = twid.last_frame
         dc.append(frame.pwm_duty_cycle)
         current.append(frame.current)
-        print(f'dutycycle: {dc[-1]:.2f} %\tcurrent: {current[-1]:.3f}')
+        print(f'dutycycle: {dc[-1]:.2f}\tcurrent: {current[-1]:.3f}')
     await twid.end_test()
 
     with open(f'motor_current_calibration_table.txt', "w") as f:
@@ -44,5 +44,5 @@ async def test(twid:TwidSerialInterfaceProtocol):
         for val in current:
             f.write(f'{val},\n')
 
-run_test(test, SERIAL_PORT, SERIAL_BAUD_RATE)
+run_test(SERIAL_PORT, SERIAL_BAUD_RATE, test)
 

@@ -26,7 +26,6 @@
 #define TELEMETRY_QUEUE_SIZE 250U
 #define COMMAND_QUEUE_SIZE 10U
 #define TELEMETRY_DEFAULT_SAMPLE_RATE 20U //telemetry sample rate in (control loops)/sample
-#define GAME_TELEMETRY_WAIT_MS 20U
 
 //hardware config
 //encoder
@@ -43,18 +42,12 @@
 #define MOTOR_DUTY_CYCLE_RES_BITS 10U
 #define MOTOR_DUTY_CYCLE_RES 1024
 
-//motor fix
-#define ENABLE_OUTPUT_SIGNAL_CORRECTION true //IF ENABLED, CONTROLLER WILL ALWAYS START AT 527 OR -527 DC
-#define OUTPUT_SIGNAL_CORRECTION_VALUE 500
-#define OUTPUT_SIGNAL_CORRECTION_THRESHOLD 1 //ERROR FROM SETPOINT
-
 //current sensor
-#define CURRENT_SENS_V_OFFSET 2.5 // adc voltage centered around 2.5
 #define CURRENT_SENS_VOLTS_PER_AMP 0.136 //mV/Amp sensitivity on the hall effect sensor
 
 //macro for struct (partial) init to fill out default controller parameters
 //CHANGE CONTROLLER DEFAULT CONFIG HERE!!!!
-#define INIT_CONTROLLER_CONFIG(X) controller_config_t X = {\
+#define INIT_CONTROLLER_CONFIG_PARTIAL(X) controller_context_t X = {\
     .control_type = control_type_t::POSITION_CTRL,\
     .setpoint_type = setpoint_type_t::CONSTANT_SETPOINT_MODE,\
     .init_setpoint = {.pos = 0.0, .vel = 0.0, .accel = 0.0, .torque = 0.0},\

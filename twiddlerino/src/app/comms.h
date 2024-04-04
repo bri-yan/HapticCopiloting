@@ -43,6 +43,10 @@ typedef enum {
     SET_IMPEDANCE= 9,
     SET_MODE= 10,
     SET_TELEMSAMPLERATE= 11,
+    SET_MULTISETPOINT_POSITION = 12,
+    SET_MULTISETPOINT_VELOCITY = 13,
+    SET_MULTISETPOINT_ACCELERATION = 14,
+    SET_MULTISETPOINT_TORQUE = 15,
 } cmd_type_t;
 
 /**
@@ -78,7 +82,7 @@ typedef union {
 
 // read controller config strings, will return false if string is invalid/not recognized, 
 // otherwise will fill config struct
-cmd_type_t decode_config_cmd(String *, controller_config_t *);
+cmd_type_t decode_config_cmd(String *, controller_context_t *);
 
 void ack_cmd(cmd_type_t);
 

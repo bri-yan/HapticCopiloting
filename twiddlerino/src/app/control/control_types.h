@@ -13,7 +13,12 @@
 
 #include <stdint.h>
 
+#include "app/twid32_config.h"
+
 #include "Arduino.h"
+
+#define CIRCULAR_BUFFER_INT_SAFE
+#include <CircularBuffer.hpp>
 
 /******************************************************************************/
 /*                              T Y P E D E F S                               */
@@ -117,12 +122,18 @@ typedef struct {
     uint32_t nframes_sent_queue;
 } telemetry_t;
 
+
+#define SETPOINT_BUFFER_SIZE 100U
+typedef CircularBuffer<setpoint_t, SETPOINT_BUFFER_SIZE> setpoint_buffer_type_t; 
+
 /**
  * @brief Controller configuration
  */
 typedef struct {
     //telemetry
     QueueHandle_t* telem_queue_handle;
+    setpoint_buffer_type_t* setpoint_buffer;   
+    SemaphoreHandle_t* buffer_mutex;
 
     //config
     control_type_t control_type;
@@ -147,6 +158,6 @@ typedef struct {
     int32_t output_llim;
 
     uint32_t telemetry_sample_rate;//telemetry sample rate in (control loops)/sample
-} controller_config_t;
+} controller_context_t;
 
 #endif // TWID_CONTROL_TYPES_H_

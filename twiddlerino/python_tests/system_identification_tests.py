@@ -15,8 +15,8 @@ import asyncio
 from serial_interface.serial_interface import TwidSerialInterfaceProtocol, TelemetryFrame, run_test, ControlType
 
 #control parameter fitting
-from tbcontrol.responses import fopdt, sopdt
 import scipy.optimize
+import scipy.signal
 
 import matplotlib.pyplot as plt
 import pandas
@@ -34,6 +34,10 @@ PWM_AMPLITUDE = 12
 DC_STEPS = [128, 256, 512, 1024]
 
 DATA_DIR_PATH = os.path.join(os.getcwd(),'data')
+
+#second order model
+def so_model(x,K,wn,zeta):
+    return scipy.signal.lti([K],[1, 2*wn*zeta, wn**2]).step(T=x)[1]
 
 async def current_step_response_test(twid:TwidSerialInterfaceProtocol):
     await twid.update_telem_sample_rate(20)
@@ -73,9 +77,9 @@ async def current_step_response_test(twid:TwidSerialInterfaceProtocol):
         #apply curve fitting to get second order params using scipy
         #here we are curve fitting to a second order transfer function with dead time
         #has an initial guess of [2, 2, 1.5, 1, 0]
-        [K, tau, zeta, theta, y0], _ = scipy.optimize.curve_fit(sopdt, dataseries['ts'], dataseries['current'], [2, 2, 1.5, 0, 0])
+        [K, wn, zeta],_ = scipy.optimize.curve_fit(so_model, dataseries['ts'], dataseries['current'])
         output_str = f'Step response estimated second order parameters:\n\
-            K:{K}\ttau;{tau}\tzeta:{zeta}\ttheta{theta}\ty0:{y0}\n'
+            K:{K}\twn:{wn}\tzeta:{zeta}\n'
         print(output_str)
         #save params to a text file
         with open(os.path.join(DATA_DIR_PATH,f'so_tf_params_{step_input}.txt'), "w") as f:
@@ -86,7 +90,7 @@ async def current_step_response_test(twid:TwidSerialInterfaceProtocol):
         #real data
         plt.scatter(dataseries['ts'], dataseries['current'], label='Data')
         #fitted transfer function response data
-        plt.plot(dataseries['ts'], sopdt(dataseries['ts'], K, tau, zeta, theta, y0), color='red', label='SOPDT TF fit')
+        plt.plot(dataseries['ts'], so_model(dataseries['ts'], K, wn, zeta), color='red', label='SOPDT TF fit')
         plt.legend(loc='best')
         #save plot
         plt.savefig(os.path.join(DATA_DIR_PATH,f'step_resp_fit_{step_input}.png'))
@@ -97,5 +101,5 @@ async def current_step_response_test(twid:TwidSerialInterfaceProtocol):
 async def position_step_response_test(twid:TwidSerialInterfaceProtocol):
     pass
 
-run_test(current_step_response_test, SERIAL_PORT, SERIAL_BAUD_RATE)
+run_test(SERIAL_PORT, SERIAL_BAUD_RATE, current_step_response_test)
 
