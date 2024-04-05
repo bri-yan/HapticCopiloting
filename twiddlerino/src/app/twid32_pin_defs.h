@@ -19,11 +19,11 @@
 /******************************************************************************/
 
 //encoders
-#define PIN_ENCODER1_QUAD_A  gpio_num_t::GPIO_NUM_25  //Encoder 1 quaderture signal A
-#define PIN_ENCODER1_QUAD_B  gpio_num_t::GPIO_NUM_26   //Encoder 1 quaderture signal B
+#define PIN_ENCODER1_QUAD_A  gpio_num_t::GPIO_NUM_26  //Encoder 1 quaderture signal A
+#define PIN_ENCODER1_QUAD_B  gpio_num_t::GPIO_NUM_25   //Encoder 1 quaderture signal B
 
-#define PIN_ENCODER2_QUAD_A  gpio_num_t::GPIO_NUM_27  //Encoder 2 quaderture signal A
-#define PIN_ENCODER2_QUAD_B  gpio_num_t::GPIO_NUM_4   //Encoder 2 quaderture signal B
+#define PIN_ENCODER2_QUAD_A  gpio_num_t::GPIO_NUM_4  //Encoder 2 quaderture signal A
+#define PIN_ENCODER2_QUAD_B  gpio_num_t::GPIO_NUM_27   //Encoder 2 quaderture signal B
 
 //current sensor (communicates through i2c interface)
 #define PIN_CURRENT_SENS_ADC_SCL  gpio_num_t::GPIO_NUM_22
