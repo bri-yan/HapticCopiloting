@@ -36,7 +36,7 @@ import serial.tools.list_ports
 #external gui socket address
 SERIAL_STUDIO_HOST = '127.0.0.1'
 SERIAL_STUDIO_PORT = 15555
-SERIAL_BAUD_RATE = 2000000
+SERIAL_BAUD_RATE = 1000000
 
 _LOG_NAME = 'TWIDDLERINO_SERIAL'
 _LOG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..','data','logs')
@@ -214,7 +214,7 @@ class TwidSerialInterfaceProtocol(asyncio.Protocol):
 
     def connection_made(self, transport) -> None:
         self._loop = asyncio.get_event_loop()
-        self._frame_queues = {TwidID.TWID1_ID:queue.Queue(1000), TwidID.TWID2_ID:queue.Queue(1000)}
+        self._frame_queues = {TwidID.TWID1_ID:queue.Queue(100000), TwidID.TWID2_ID:queue.Queue(100000)}
 
         self.socket_write_buffer:queue.Queue = queue.Queue(1000)
 
@@ -318,13 +318,14 @@ class TwidSerialInterfaceProtocol(asyncio.Protocol):
                                     self._logger.debug(f'set wait_for_param_flag flag @ {self._wait_for_param_flag}')
                         
                         processed = True
-            if not processed and len(line) > 1:
-                self._serial_dump_logger.debug(line)
+            if not processed and len(line) > 2:
                 if b'/*T' in line or b'/**' in line or b'**/' in line:
                     if i < len(data_lines) - 1:
                         self.buffer += line + b'\n'
                     else:
                         self.buffer += b'\n' + line
+                else:
+                    self._serial_dump_logger.debug(line)
 
     def pause_reading(self) -> None:
         # This will stop the callbacks to data_received
@@ -348,10 +349,10 @@ class TwidSerialInterfaceProtocol(asyncio.Protocol):
         t = TelemetryFrame()
         count: int = 0
         for item in spl:
-            if item.isnumeric():
-                setattr(t,self.datafields[count],float(item))
-            else:
+            if self.datafields[count] == 'twid_id_val':
                 setattr(t,self.datafields[count],item)
+            else:
+                setattr(t,self.datafields[count], float(item))
             count+=1
         for num, name in TwidSerialInterfaceProtocol.control_value_fields:
             if num == t.control_type_val:
@@ -457,7 +458,7 @@ class TwidSerialInterfaceProtocol(asyncio.Protocol):
             for q in qs:
                 if not q.empty():
                     out.append(q.get())
-            await asyncio.sleep(1e-3)
+            await asyncio.sleep(1e-5)
         
         self._logger.debug(f'collected {len(out)} telemetry frames during {duration}s interval')
         
@@ -487,7 +488,6 @@ class TwidSerialInterfaceProtocol(asyncio.Protocol):
 
     async def end(self):
         await self.motor_stop()
-        await self.esp32_reboot()
         self._stop_flag.set()
         self.transport.close()
         self._logger.info(f'end called')

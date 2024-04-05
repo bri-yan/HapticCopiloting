@@ -9,11 +9,11 @@ import scipy
 
 import asyncio
 import serial_asyncio
-from serial_interface.serial_interface import TwidSerialInterfaceProtocol, TelemetryFrame, run_test, ControlType
+from serial_interface.serial_interface import TwidSerialInterfaceProtocol, TelemetryFrame, run_test, ControlType, TwidID
+import pandas
 
 ###SERIAL CONFIGURATION for esp32
-SERIAL_PORT = 'COM9'
-SERIAL_BAUD_RATE = 1000000
+SERIAL_PORT = 'COM4'
 
 #MOTOR EMPIRCAL PARAMS
 
@@ -21,24 +21,25 @@ SERIAL_BAUD_RATE = 1000000
 PWM_AMPLITUDE = 12
 
 async def test(twid:TwidSerialInterfaceProtocol):
-    await twid.update_telem_sample_rate(20)
-    await twid.update_control_type(ControlType.NO_CTRL)
-    await twid.update_dutycycle(0)
+    tid = TwidID.TWID1_ID
+    await twid.update_telem_sample_rate(tid,20)
+    await twid.update_control_type(tid,ControlType.NO_CTRL)
+    await twid.update_dutycycle(tid,0)
 
-    dcspan = np.linspace(0,1024,100)
-    data = {'dc':[], 'volts_approx':[], 'current':[], 'vel_filtered':[],'i_rpm':[],'v_rpm':[],'Ke':[],'R':[]}
+    dcspan = np.linspace(0,1024,50)
+    data = {'dc':[], 'volts_approx':[], 'current':[], 'vel_filtered':[],'i_rpm':[],'v_rpm':[],'Ke':[],'R':[],'B':[],'Bc':[]}
 
     for i in range(dcspan.size):
-        await twid.update_dutycycle(int(dcspan[i]))
-        await twid.wait_for_param('pwm_duty_cycle', int(dcspan[i]))
+        assert await twid.update_dutycycle(tid,int(dcspan[i]))
+        assert await twid.wait_for_param('pwm_duty_cycle', int(dcspan[i]))
         
         #wait 1 sec until steady state
-        await asyncio.sleep(1.0)
+        await asyncio.sleep(0.5)
 
-        data['dc'].append(twid.last_frame_t1.pwm_duty_cycle)
-        data['volts_approx'].append(twid.last_frame_t1.pwm_duty_cycle/1024 * PWM_AMPLITUDE)
-        data['current'].append(twid.last_frame_t1.current)
-        data['vel_filtered'].append(twid.last_frame_t1.filtered_velocity)
+        data['dc'].append(twid.latest_frame_t1.pwm_duty_cycle)
+        data['volts_approx'].append(twid.latest_frame_t1.pwm_duty_cycle/1024 * PWM_AMPLITUDE)
+        data['current'].append(twid.latest_frame_t1.current)
+        data['vel_filtered'].append(twid.latest_frame_t1.filtered_velocity)
         print(f'progress:{i/dcspan.size*100:.2f} %\tdc:{data['dc'][-1]}\tamps:{data['current'][-1]}\trpm:{data['vel_filtered'][-1]}')
     await twid.end()
 
@@ -77,7 +78,8 @@ async def test(twid:TwidSerialInterfaceProtocol):
           Friction (Coulumb/Static)\t{data['Bc']} Nm\n')
 
     with open(f'motor_speed_cst_tbl.txt', "w") as f:
-        for key,val in data:
+        for key in data.keys():
+            val = data[key]
             f.write(f'{key}\n')
             for element in val:
                 f.write(f'{element},\n')

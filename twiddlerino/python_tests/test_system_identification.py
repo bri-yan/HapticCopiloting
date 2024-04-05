@@ -12,7 +12,7 @@ https://github.com/alchemyst/Dynamics-and-Control/blob/e49e69347e8e67c82d5543b55
 import numpy as np
 
 import asyncio
-from serial_interface.serial_interface import TwidSerialInterfaceProtocol, TelemetryFrame, run_test, ControlType
+from serial_interface.serial_interface import TwidSerialInterfaceProtocol, TelemetryFrame, run_test, ControlType, TwidID
 
 #control parameter fitting
 import scipy.optimize
@@ -24,7 +24,7 @@ import pandas
 import os
 
 ###SERIAL CONFIGURATION for esp32
-SERIAL_PORT = 'COM9'
+SERIAL_PORT = 'COM4'
 
 #MOTOR EMPIRCAL PARAMS
 
@@ -39,18 +39,19 @@ def so_model(x,K,wn,zeta):
     return scipy.signal.lti([K],[1, 2*wn*zeta, wn**2]).step(T=x)[1]
 
 async def current_step_response_test(twid:TwidSerialInterfaceProtocol):
-    await twid.update_telem_sample_rate(5)
-    await twid.update_control_type(ControlType.NO_CTRL)
-    await twid.wait_for_param('control_type', ControlType.NO_CTRL)
+    tid = TwidID.TWID1_ID
+    await twid.update_telem_sample_rate(tid, 5)
+    await twid.update_control_type(tid,ControlType.NO_CTRL)
+    await twid.wait_for_param('control_type', ControlType.NO_CTRL,tid)
 
-    await twid.update_dutycycle(0)
-    await twid.wait_for_param('pwm_duty_cycle',0)
+    await twid.update_dutycycle(tid,0)
+    await twid.wait_for_param('pwm_duty_cycle',0,tid)
 
     #apply step input and record step response for different step inputs
     for step_input in DC_STEPS:
-        await twid.update_dutycycle(step_input)
+        await twid.update_dutycycle(tid,step_input)
         #collect all data for next 5 seconds
-        dataseries = await twid.collect_telem(5)
+        dataseries = await twid.collect_telem(tid,5)
         print(dataseries)
         #stop motor
         await twid.motor_stop()
@@ -61,13 +62,13 @@ async def current_step_response_test(twid:TwidSerialInterfaceProtocol):
         dataseries.to_csv(os.path.join(DATA_DIR_PATH,f'current_step_response_{step_input}.csv'), index=False)
 
         #collect info from start of step only
-        dataseries['ts'] = dataseries['ts'][dataseries['dc'] >= step_input]
-        dataseries['current'] = dataseries['current'][dataseries['dc'] >= step_input]
+        dataseries['timestamp_ms'] = dataseries['timestamp_ms'][dataseries['pwm_duty_cycle'] >= step_input]
+        dataseries['current'] = dataseries['current'][dataseries['pwm_duty_cycle'] >= step_input]
     
         #apply curve fitting to get second order params using scipy
         #here we are curve fitting to a second order transfer function with dead time
         #has an initial guess of [2, 2, 1.5, 1, 0]
-        [K, wn, zeta],_ = scipy.optimize.curve_fit(so_model, dataseries['ts'], dataseries['current'])
+        [K, wn, zeta],_ = scipy.optimize.curve_fit(so_model, dataseries['timestamp_ms'], dataseries['current'])
         output_str = f'Step response estimated second order parameters:\n\
             K:{K}\twn:{wn}\tzeta:{zeta}\n'
         print(output_str)
@@ -78,9 +79,9 @@ async def current_step_response_test(twid:TwidSerialInterfaceProtocol):
         #make some plots too :)
         plt.figure(figsize=(10, 5))
         #real data
-        plt.scatter(dataseries['ts'], dataseries['current'], label='Data')
+        plt.scatter(dataseries['timestamp_ms'], dataseries['current'], label='Data')
         #fitted transfer function response data
-        plt.plot(dataseries['ts'], so_model(dataseries['ts'], K, wn, zeta), color='red', label='SOPDT TF fit')
+        plt.plot(dataseries['timestamp_ms'], so_model(dataseries['timestamp_ms'], K, wn, zeta), color='red', label='SOPDT TF fit')
         plt.legend(loc='best')
         #save plot
         plt.savefig(os.path.join(DATA_DIR_PATH,f'step_resp_fit_{step_input}.png'))

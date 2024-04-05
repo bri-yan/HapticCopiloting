@@ -31,5 +31,9 @@
 //initializes Twiddlerino
 void twiddlerino_setup();
 
+void enable_telemetry_publisher();
+
+void disable_telemetry_publisher();
+
 #endif //TWIDDLERINO_H_
 

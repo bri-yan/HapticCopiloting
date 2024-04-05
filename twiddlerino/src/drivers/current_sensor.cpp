@@ -23,6 +23,11 @@
 #include "esp32-hal-i2c.h"
 #include "esp32-hal-i2c-slave.h"
 
+//hardware drivers
+#include "drivers/encoder.h"
+#include "drivers/motor.h"
+#include "drivers/current_sensor.h"
+
 #include "freertos/task.h"
 
 /******************************************************************************/
@@ -97,11 +102,11 @@ void current_sensor_init() {
 }
 
 double current_sensor_get_volts(curr_sens_adc_channel_t chan) {
-  return (get_latest(chan) + zeros[chan]);
+  return (get_latest(chan) - zeros[chan]);
 }
 
 double current_sensor_get_current(curr_sens_adc_channel_t chan) {
-  return (get_latest(chan) + zeros[chan])/CURRENT_SENS_VOLTS_PER_AMP;
+  return (get_latest(chan) - zeros[chan])/CURRENT_SENS_VOLTS_PER_AMP;
 }
 
 uint16_t current_sensor_sps() {
@@ -131,8 +136,13 @@ void TaskReadCurrentSensor(void *pvParameters) {
   ESP_LOGI(TAG, "current sensor read task started");
   for(;;) 
   {
+    uint32_t start_time = micros();
     auto chan1 = ads_read(curr_sens_adc_channel_t::CURRENT_SENSOR_1);
+    ESP_LOGD(TAG, "read channel 1 dt: %lu us",micros()-start_time);
+    vTaskDelay( 0 );
+    start_time = micros();
     auto chan2 = ads_read(curr_sens_adc_channel_t::CURRENT_SENSOR_2);
+    ESP_LOGD(TAG, "read channel 1 dt: %lu us",micros()-start_time);
 
     xSemaphoreTake(xSensMutex, portMAX_DELAY);
     latest_readings[curr_sens_adc_channel_t::CURRENT_SENSOR_1] = chan1;

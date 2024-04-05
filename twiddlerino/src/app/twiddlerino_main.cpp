@@ -213,31 +213,29 @@ void TaskRunTControl(void *pvParameters){
   INIT_CONTROLLER_CONFIG_PARTIAL(default_config);
   controller1_handle->config = default_config;
   controller1_handle->ctrl_id = TWID1_ID;
-  controller2_handle->config = default_config;
-  controller2_handle->ctrl_id = TWID2_ID;
-
   controller1_handle->mutex = xSemaphoreCreateMutex();
-  controller2_handle->mutex = xSemaphoreCreateMutex();
-  
   controller1_handle->telem_queue_handle = xQueueTelemetry;
-  controller2_handle->telem_queue_handle = xQueueTelemetry;
-
+  controller2_handle->config = default_config;
   controller1_handle->motor_handle = &motor1_handle;
-  controller2_handle->motor_handle = &motor2_handle;
-
   controller1_handle->encoder_handle = &encoder1_handle;
-  controller2_handle->encoder_handle = &encoder2_handle;
-
   controller1_handle->current_sens_chan = curr_sens_adc_channel_t::CURRENT_SENSOR_1;
-  controller2_handle->current_sens_chan = curr_sens_adc_channel_t::CURRENT_SENSOR_2;
-
   tcontrol_cfg(controller1_handle, &(controller1_handle->config));
-  tcontrol_cfg(controller2_handle, &(controller2_handle->config));
   tcontrol_start(controller1_handle);
-  tcontrol_start(controller2_handle);
-
   ESP_LOGI(TAG, "Controller %s loop status: %i\n", controller1_handle->ctrl_id,  tcontrol_is_running(controller1_handle));
-  ESP_LOGI(TAG, "Controller %s loop status: %i\n", controller2_handle->ctrl_id,  tcontrol_is_running(controller2_handle));
+
+  if (ENABLE_SECOND_CONTROLLER) {
+    controller2_handle->ctrl_id = TWID2_ID;
+    controller2_handle->mutex = xSemaphoreCreateMutex();
+    controller2_handle->telem_queue_handle = xQueueTelemetry;
+    controller2_handle->motor_handle = &motor2_handle;
+    controller2_handle->encoder_handle = &encoder2_handle;
+    controller2_handle->current_sens_chan = curr_sens_adc_channel_t::CURRENT_SENSOR_2;
+
+    tcontrol_cfg(controller2_handle, &(controller2_handle->config));
+    tcontrol_start(controller2_handle);
+
+    ESP_LOGI(TAG, "Controller %s loop status: %i\n", controller2_handle->ctrl_id,  tcontrol_is_running(controller2_handle));
+  }
 
   for(;;)
   {
@@ -266,41 +264,18 @@ void TaskReadTCommands(void *pvParameters) {
       read_string = read_string_until('\n');
       last_cmd = cmd_type_t::NA_CMD;
       ESP_LOGD(TAG, "Received data: %s\n", read_string);
-
-     if(read_string == "hello" || read_string == "ping"){
-        Serial.printf("esp_alive_signal\n");
-      } else if(read_string == "STOP" || read_string == "stop"){
-        motor_fast_stop(&motor1_handle);
-        motor_fast_stop(&motor2_handle);
-        tcontrol_stop(controller1_handle);
-        tcontrol_stop(controller2_handle);
-        last_cmd = cmd_type_t::STOP;
-      } else if(read_string == "RESET" || read_string == "reset"){
-        motor_fast_stop(&motor1_handle);
-        motor_fast_stop(&motor2_handle);
-        reset_sent_count();
-        tcontrol_reset(controller1_handle);
-        tcontrol_reset(controller2_handle);
-        last_cmd = cmd_type_t::RESET;
-      } else if(read_string == "REBOOT" || read_string == "reboot"){
-        last_cmd = cmd_type_t::REBOOT;
-        //we need to send ack before the cpu resets
-        ack_cmd(last_cmd);
-        //reset cpu
-        esp_restart();
-      } else if(read_string == "telemetry_enable") {
-        enable_debug_telemetry = true;
-        last_cmd = cmd_type_t::TELEM_ENABLE;
-      } else if(read_string == "telemetry_disable") {
-        enable_debug_telemetry = false;
-        last_cmd = cmd_type_t::TELEM_DISABLE;
-      } else {
-        last_cmd = handle_command(&read_string);
-      }
-
+      last_cmd = handle_command(&read_string);
       ack_cmd(last_cmd);
     }
 
     vTaskDelay( 10 );
   }
+}
+
+void enable_telemetry_publisher() {
+  enable_debug_telemetry = true;
+}
+
+void disable_telemetry_publisher() {
+    enable_debug_telemetry = false;
 }

@@ -29,9 +29,10 @@
 //command and telemetry config
 #define ENABLE_DEBUG_TELEMETRY_ON_INIT true
 #define TELEMETRY_QUEUE_SIZE 250U
-#define COMMAND_QUEUE_SIZE 10U
 #define TELEMETRY_DEFAULT_SAMPLE_RATE 20U //telemetry sample rate in (control loops)/sample
-#define FREE_RTOS_TELEM_SAMPLE_RATE 1000U //MS
+#define FREE_RTOS_TELEM_SAMPLE_RATE 5000U //MS
+
+#define ENABLE_SECOND_CONTROLLER 0
 
 //hardware config
 //encoder
@@ -39,10 +40,10 @@
 #define ENCODER_CPR 500
 
 //serial port
-#define UART_BAUD_RATE 2000000U
+#define UART_BAUD_RATE 1000000U
 
 //motor
-#define MOTOR_MAX_SPEED_RPM 10000
+#define MOTOR_MAX_SPEED_RPM 100000
 #define MOTOR_PWM_FREQ 20000U
 #define MOTOR_DUTY_CYCLE_RES_BITS 10U
 #define MOTOR_DUTY_CYCLE_RES 1024
@@ -63,7 +64,7 @@
     .Kp = 0.5, .Ki = 0.01, .Kd = 0.01, .N = 1.0,\
     .velocity_filter_const = 0.01,\
     .current_filter_const = 0.1,\
-    .motor_Kv = 0.025, .motor_Ke = 0.011, .motor_J = 1e-6,\
+    .motor_Kv = 2E-5, .motor_Ke = 0.009901879421645426, .motor_J = 1e-6,\
     .impedance = {.K = 1e-3, .B = 0.01, .J = 1e-6},\
     .output_hlim = MOTOR_DUTY_CYCLE_RES, .output_llim = -MOTOR_DUTY_CYCLE_RES,\
     .telemetry_sample_rate = TELEMETRY_DEFAULT_SAMPLE_RATE,\

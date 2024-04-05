@@ -19,6 +19,13 @@
 
 #include "twiddlerino_main.h"
 
+//hardware drivers
+#include "drivers/encoder.h"
+#include "drivers/motor.h"
+#include "drivers/current_sensor.h"
+
+
+
 
 /******************************************************************************/
 /*                               D E F I N E S                                */
@@ -60,26 +67,52 @@ static String elements[MAX_ELEMENTS];
 
 cmd_type_t handle_command(String *str) {
     ESP_LOGD(TAG, "Recived cmd string %s", *str);
-    
+
     auto num_elements = extract_cs_strings(str, elements);
+    ESP_LOGD(TAG, "Extracted %i elements from command string", num_elements);
     twid_controller_t *ctrl;
     uint16_t i0 = 0;
-    if(!num_elements) {
-        return cmd_type_t::NA_CMD;
-    } else if (elements[0] == TWID1_ID) {
+
+    if (elements[0] == TWID1_ID) {
+        ESP_LOGD(TAG, "Interpreting command for Twid 1");
         ctrl = controller1_handle;
         i0++; //index 0 is an id, data starts at index 1
-    } else if (elements[0] == TWID2_ID) {
+    } else if (elements[0] == TWID2_ID && ENABLE_SECOND_CONTROLLER) {
+        ESP_LOGD(TAG, "Interpreting command for Twid 2");
         ctrl = controller2_handle;
         i0++;
     } else {
+        ESP_LOGD(TAG, "Defaulting to command interpreting for twid 1");
         //default to controller 1 handle
         ctrl = controller1_handle;
     }
 
     auto cfg = ctrl->config;
 
-    if(str->substring(0,7) == "set_pid" && num_elements >= 3){
+    if(*str == "hello" || *str == "ping"){
+        Serial.printf("esp_alive_signal\n");
+    } else if(*str == "STOP" || *str == "stop"){
+        motor_fast_stop(ctrl->motor_handle);
+        tcontrol_stop(ctrl);
+        return cmd_type_t::STOP;
+    } else if(*str == "RESET" || *str == "reset"){
+        motor_fast_stop(ctrl->motor_handle);
+        reset_sent_count();
+        tcontrol_reset(ctrl);
+        return cmd_type_t::RESET;
+    } else if(*str == "REBOOT" || *str == "reboot"){
+        auto last_cmd = cmd_type_t::REBOOT;
+        //we need to send ack before the cpu resets
+        ack_cmd(last_cmd);
+        //reset cpu, does not return
+        esp_restart();
+    } else if(*str == "telemetry_enable") {
+        enable_telemetry_publisher();
+        return cmd_type_t::TELEM_ENABLE;
+    } else if(*str == "telemetry_disable") {
+        disable_telemetry_publisher();
+        return cmd_type_t::TELEM_DISABLE;
+    } else if(str->substring(0,7) == "set_pid" && num_elements >= 3){
         cfg.Kp = elements[i0].toDouble();
         cfg.Ki = elements[i0+1].toDouble();
         cfg.Kd = elements[i0+2].toDouble();
@@ -123,6 +156,7 @@ cmd_type_t handle_command(String *str) {
         tcontrol_cfg(ctrl, &cfg);
         return cmd_type_t::SET_MODE;
     } else if(str->substring(0,19) == "set_telemsamplerate" && num_elements >= 1) {
+        ESP_LOGD(TAG, "%s", *str);
         auto val = elements[i0].toInt();
         if (val >= 1) {
             cfg.telemetry_sample_rate = (uint32_t)val;
@@ -171,12 +205,6 @@ cmd_type_t handle_command(String *str) {
         // }
 
         // return cmd;
-    }
-
-    for(int i = 0; i < num_elements; i++) {
-        auto obj = elements[i];
-        elements[i] = "";
-        delete &obj;
     }
 
     return cmd_type_t::NA_CMD;
@@ -308,18 +336,17 @@ uint16_t extract_cs_strings(String * str, String *out) {
         i0++;
         i = str->indexOf(",",i0);
         if (i < 0) {
-            if (j == 0) {
-                break;
-            }
             i = str->length() - 1;
+            break;
         }
         out[j] = str->substring(i0,i);
         out[j].toCharArray(buffer, 100);
 
         //verbose log, only compiles if build flag is set
-        ESP_LOGV(TAG, "Extracted substring %s", buffer);
+        ESP_LOGD(TAG, "Extracted substring %s", buffer);
 
         num++;
+        vTaskDelay(1);
     }
 
     return num;

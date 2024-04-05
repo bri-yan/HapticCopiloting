@@ -264,8 +264,8 @@ static void pid_callback(void *args)
             feedback_signal = ctrl->telem.current;
             break;
         case control_type_t::ADMITTANCE_CTRL:
-            feedback_signal = 0;
-            setpoint_signal = 0;
+            feedback_signal = ctrl->telem.torque_external/ctrl->config.impedance.K + ctrl->setpoint.pos;
+            feedback_signal = ctrl->telem.current;
             break;
         default:
             feedback_signal = 0;
