@@ -14,7 +14,7 @@ from serial_interface.serial_interface import TwidSerialInterfaceProtocol, Telem
 SERIAL_PORT = 'COM9'
 SERIAL_BAUD_RATE = 1000000
 
-async def test(twid:TwidSerialInterfaceProtocol):
+async def serial_test(twid:TwidSerialInterfaceProtocol):
     assert await twid.update_telem_sample_rate(5)
     assert await twid.update_telem_sample_rate(10)
     assert await twid.update_telem_sample_rate(20)
@@ -43,4 +43,4 @@ async def test(twid:TwidSerialInterfaceProtocol):
     
     await twid.end()
 
-run_test(SERIAL_PORT, SERIAL_BAUD_RATE, test)
+run_test(SERIAL_PORT, SERIAL_BAUD_RATE, serial_test)
