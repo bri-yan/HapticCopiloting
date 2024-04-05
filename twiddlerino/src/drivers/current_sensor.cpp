@@ -37,6 +37,12 @@
 //blocking
 double ads_read(curr_sens_adc_channel_t);
 
+//get latest voltage reading non-blocking
+double get_latest(curr_sens_adc_channel_t);
+
+//continiously updates latest readings
+void TaskReadCurrentSensor(void *pvParameters);
+
 /******************************************************************************/
 /*               P R I V A T E  G L O B A L  V A R I A B L E S                */
 /******************************************************************************/
@@ -47,6 +53,11 @@ static Adafruit_ADS1115 ads;
 
 static double zeros[4] = {0.0};
 static bool zeroed_on_startup[4] = {false};
+static volatile double latest_readings[4] = {0.0};
+
+//freertos current sensor read task
+static TaskHandle_t xCurrentSensTask;
+static SemaphoreHandle_t xSensMutex;
 
 /******************************************************************************/
 /*                       P U B L I C  F U N C T I O N S                       */
@@ -54,6 +65,8 @@ static bool zeroed_on_startup[4] = {false};
 
 
 void current_sensor_init() {
+  xSensMutex = xSemaphoreCreateMutex();
+
   //note ads.begin() implicity uses i2c address 72U
   //                and default scl/sda i2c pins gpio 22 (scl) and gpio21 (sda)
 
@@ -71,14 +84,24 @@ void current_sensor_init() {
 
   ads.setDataRate(RATE_ADS1115_860SPS);
   ads.setGain(adsGain_t::GAIN_TWOTHIRDS);
+
+  xTaskCreatePinnedToCore(
+    TaskReadCurrentSensor
+    ,  "Current_Sensor_Read_Task"
+    ,  8192
+    ,  NULL
+    ,  TASK_PRIORITY_SENSOR
+    ,  &xCurrentSensTask
+    ,  CORE_SENSOR_TASK
+  );
 }
 
 double current_sensor_get_volts(curr_sens_adc_channel_t chan) {
-  return (ads_read(chan) + zeros[chan]);
+  return (get_latest(chan) + zeros[chan]);
 }
 
 double current_sensor_get_current(curr_sens_adc_channel_t chan) {
-  return (ads_read(chan) + zeros[chan])/CURRENT_SENS_VOLTS_PER_AMP;
+  return (get_latest(chan) + zeros[chan])/CURRENT_SENS_VOLTS_PER_AMP;
 }
 
 uint16_t current_sensor_sps() {
@@ -89,11 +112,43 @@ uint16_t current_sensor_sps() {
 /*                      P R I V A T E  F U N C T I O N S                      */
 /******************************************************************************/
 
+double get_latest(curr_sens_adc_channel_t chan) {
+  if (xPortInIsrContext() == pdTRUE) {
+    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+    xSemaphoreTakeFromISR(xSensMutex, &xHigherPriorityTaskWoken);
+    auto sens = latest_readings[chan];
+    xSemaphoreGiveFromISR(xSensMutex, &xHigherPriorityTaskWoken);
+    return sens;
+  } else {
+    xSemaphoreTake(xSensMutex, portMAX_DELAY);
+    auto sens = latest_readings[chan];
+    xSemaphoreGive(xSensMutex);
+    return sens;
+  }
+}
+
+void TaskReadCurrentSensor(void *pvParameters) {
+  ESP_LOGI(TAG, "current sensor read task started");
+  for(;;) 
+  {
+    auto chan1 = ads_read(curr_sens_adc_channel_t::CURRENT_SENSOR_1);
+    auto chan2 = ads_read(curr_sens_adc_channel_t::CURRENT_SENSOR_2);
+
+    xSemaphoreTake(xSensMutex, portMAX_DELAY);
+    latest_readings[curr_sens_adc_channel_t::CURRENT_SENSOR_1] = chan1;
+    latest_readings[curr_sens_adc_channel_t::CURRENT_SENSOR_2] = chan2;
+    xSemaphoreGive(xSensMutex);
+  
+    vTaskDelay( 1 );
+  }
+}
+
 double ads_read(curr_sens_adc_channel_t chan){
   ESP_LOGV(TAG, "current sensor adc read channel %i", chan);
   //not sure how long this takes
-  auto sens =  ads.computeVolts(ads.readADC_SingleEnded(MUX_BY_CHANNEL[chan]));
+  auto sens = ads.computeVolts(ads.readADC_SingleEnded(MUX_BY_CHANNEL[chan]));
   if (!zeroed_on_startup[chan]) {
+    ESP_LOGI(TAG, "zeroed current sens adc reading on channel %i", chan);
     zeros[chan] = sens;
     zeroed_on_startup[chan] = true;
   }

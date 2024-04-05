@@ -26,6 +26,8 @@
 
 #define READ_TIMEOUT_US 200U
 
+#define MAX_ELEMENTS 100U
+
 /******************************************************************************/
 /*                              T Y P E D E F S                               */
 /******************************************************************************/
@@ -40,6 +42,8 @@ static char timed_read();
 
 static void insert_setpoint_buffer(cmd_type_t cmd, String * str, setpoint_t* buffer, SemaphoreHandle_t* mutex, uint16_t num_values);
 
+uint16_t extract_cs_strings(String * str, String *out);
+
 /******************************************************************************/
 /*               P R I V A T E  G L O B A L  V A R I A B L E S                */
 /******************************************************************************/
@@ -47,33 +51,50 @@ static void insert_setpoint_buffer(cmd_type_t cmd, String * str, setpoint_t* buf
 static const char* TAG = "comms";
 static uint32_t nframes_sent_serial = 0;
 
+//array of char arrays
+static String elements[MAX_ELEMENTS];
+
 /******************************************************************************/
 /*                       P U B L I C  F U N C T I O N S                       */
 /******************************************************************************/
 
-cmd_type_t decode_config_cmd(String *str, controller_context_t *cfg) {
+cmd_type_t handle_command(String *str) {
     ESP_LOGD(TAG, "Recived cmd string %s", *str);
-    if(str->substring(0,7).compareTo("set_pid") == 0){
-        double vals[3] = {0.0 ,0.0, 0.0};
-        extract_doubles(str, vals, 3);
-        cfg->Kp = vals[0];
-        cfg->Ki = vals[1];
-        cfg->Kd = vals[2];
-        return cmd_type_t::SET_PID;
-    } else if(str->substring(0,13).compareTo("set_impedance") == 0) {
-        double vals[3] = {0.0,0.0,0.0};
-        extract_doubles(str, vals, 3);
-        cfg->impedance.K = vals[0];
-        cfg->impedance.B = vals[1];
-        cfg->impedance.J = vals[2];
-        return cmd_type_t::SET_IMPEDANCE;
-    } else if(str->substring(0,8).compareTo("set_mode") == 0) {
-        int16_t i0 = str->indexOf(',',0);
-        i0+=1;
-        int16_t i = str->indexOf(',',i0);
-        auto name = str->substring(i0,i);
+    
+    auto num_elements = extract_cs_strings(str, elements);
+    twid_controller_t *ctrl;
+    uint16_t i0 = 0;
+    if(!num_elements) {
+        return cmd_type_t::NA_CMD;
+    } else if (elements[0] == TWID1_ID) {
+        ctrl = controller1_handle;
+        i0++; //index 0 is an id, data starts at index 1
+    } else if (elements[0] == TWID2_ID) {
+        ctrl = controller2_handle;
+        i0++;
+    } else {
+        //default to controller 1 handle
+        ctrl = controller1_handle;
+    }
 
-        control_type_t mode = cfg->control_type;
+    auto cfg = ctrl->config;
+
+    if(str->substring(0,7) == "set_pid" && num_elements >= 3){
+        cfg.Kp = elements[i0].toDouble();
+        cfg.Ki = elements[i0+1].toDouble();
+        cfg.Kd = elements[i0+2].toDouble();
+        tcontrol_cfg(ctrl, &cfg);
+        return cmd_type_t::SET_PID;
+    } else if(str->substring(0,13) == "set_impedance" && num_elements >= 3) {
+        cfg.impedance.K = elements[i0].toDouble();
+        cfg.impedance.B = elements[i0+1].toDouble();
+        cfg.impedance.J = elements[i0+2].toDouble();
+        tcontrol_cfg(ctrl, &cfg);
+        return cmd_type_t::SET_IMPEDANCE;
+    } else if(str->substring(0,8) == "set_mode" && num_elements >= 1) {
+        auto name = elements[i0];
+
+        control_type_t mode = cfg.control_type;
         if(name == "position"){
             mode = control_type_t::POSITION_CTRL;
         } else if(name=="velocity") {
@@ -98,15 +119,30 @@ cmd_type_t decode_config_cmd(String *str, controller_context_t *cfg) {
             return cmd_type_t::NA_CMD;
         }
 
-        cfg->control_type = mode;
+        cfg.control_type = mode;
+        tcontrol_cfg(ctrl, &cfg);
         return cmd_type_t::SET_MODE;
-    } else if(str->substring(0,19) == "set_telemsamplerate") {
-        double vals[1] = {0.0};
-        extract_doubles(str, vals, 1);
-        if (vals[0] >= 1) {
-            cfg->telemetry_sample_rate = (uint32_t)vals[0];
+    } else if(str->substring(0,19) == "set_telemsamplerate" && num_elements >= 1) {
+        auto val = elements[i0].toInt();
+        if (val >= 1) {
+            cfg.telemetry_sample_rate = (uint32_t)val;
+            tcontrol_cfg(ctrl, &cfg);
             return cmd_type_t::SET_TELEMSAMPLERATE;
         }
+    } else if(str->substring(0,12) == "set_setpoint" && num_elements >= 4){
+        setpoint_t new_sp;
+        new_sp.pos = elements[i0].toDouble();
+        new_sp.vel = elements[i0+1].toDouble();
+        new_sp.accel = elements[i0+2].toDouble();
+        new_sp.torque = elements[i0+3].toDouble();
+        tcontrol_update_setpoint(ctrl, &new_sp);
+        return cmd_type_t::SET_SETPOINT;
+    } else if(str->substring(0,13) == "set_dutycycle" && num_elements >= 1) {
+        int32_t new_dc = elements[i0].toInt();
+        motor_set_pwm(ctrl->motor_handle, new_dc);
+        ESP_LOGD(TAG, "Set pwm duty cycle to %li with frequency %lu.\nMotor State: %i.\n",
+        motor_get_duty_cycle(ctrl->motor_handle), motor_get_frequency(ctrl->motor_handle), motor_get_state(ctrl->motor_handle));
+        return cmd_type_t::SET_DUTYCYCLE;
     } else if(str->substring(0,17) == "set_multisetpoint") {
         return cmd_type_t::NA_CMD;
         // int16_t i0 = str->indexOf(',',0);
@@ -135,6 +171,12 @@ cmd_type_t decode_config_cmd(String *str, controller_context_t *cfg) {
         // }
 
         // return cmd;
+    }
+
+    for(int i = 0; i < num_elements; i++) {
+        auto obj = elements[i];
+        elements[i] = "";
+        delete &obj;
     }
 
     return cmd_type_t::NA_CMD;
@@ -174,14 +216,13 @@ uint32_t publish_telemetry_serial_studio(telemetry_t *telem) {
     return size;
 }
 
-uint32_t print_controller_cfg() {
+uint32_t print_controller_cfg(twid_controller_t* ctrl_handle) {
     uint32_t size = 0;
 
     if(Serial) {
-        controller_context_t cfg;
-        tcontrol_get_cfg(&cfg);
-        size = Serial.printf("################\nCONTROLLER CONFIGURATION:\n*control_type:%i\t*sample_time:%lu us\n*Kp:%lf\t*Ki:%lf\t*Kd:%lf\n*stiffness:%lf\t*damping:%lf\t*intertia:%lf\n################\n",
-        cfg.control_type, cfg.sample_time_us, cfg.Kp, cfg.Ki, cfg.Kd, cfg.impedance.K, cfg.impedance.B, cfg.impedance.J);
+        controller_config_t cfg = ctrl_handle->config;
+        size = Serial.printf("################\n%s CONTROLLER CONFIGURATION:\n*control_type:%i\t*sample_time:%lu us\n*Kp:%lf\t*Ki:%lf\t*Kd:%lf\n*stiffness:%lf\t*damping:%lf\t*intertia:%lf\n################\n",
+        ctrl_handle->ctrl_id, cfg.control_type, cfg.sample_time_us, cfg.Kp, cfg.Ki, cfg.Kd, cfg.impedance.K, cfg.impedance.B, cfg.impedance.J);
     }
 
     return size;
@@ -256,6 +297,32 @@ void reset_sent_count() {
 /******************************************************************************/
 /*                      P R I V A T E  F U N C T I O N S                      */
 /******************************************************************************/
+
+uint16_t extract_cs_strings(String * str, String *out) {
+    int32_t i = 0, i0 = 0;
+    uint16_t num = 0;
+    char buffer[100];
+    for(int j = 0; j < MAX_ELEMENTS; j++) {
+        i0 = str->indexOf(",",i0);
+        i0++;
+        i = str->indexOf(",",i0);
+        if (i < 0) {
+            if (j == 0) {
+                break;
+            }
+            i = str->length() - 1;
+        }
+        out[j] = str->substring(i0,i);
+        out[j].toCharArray(buffer, 100);
+
+        //verbose log, only compiles if build flag is set
+        ESP_LOGV(TAG, "Extracted substring %s", buffer);
+
+        num++;
+    }
+
+    return num;
+}
 
 static char timed_read(){
     char c;

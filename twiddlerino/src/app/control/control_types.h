@@ -123,10 +123,6 @@ typedef struct {
  * @brief Controller configuration
  */
 typedef struct {
-    //telemetry
-    QueueHandle_t* telem_queue_handle;
-    SemaphoreHandle_t* buffer_mutex;
-
     //config
     control_type_t control_type;
     setpoint_type_t setpoint_type;
@@ -150,6 +146,6 @@ typedef struct {
     int32_t output_llim;
 
     uint32_t telemetry_sample_rate;//telemetry sample rate in (control loops)/sample
-} controller_context_t;
+} controller_config_t;
 
 #endif // TWID_CONTROL_TYPES_H_

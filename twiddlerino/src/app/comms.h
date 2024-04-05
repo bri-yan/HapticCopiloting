@@ -12,6 +12,7 @@
 /******************************************************************************/
 
 #include "app/control/control_types.h"
+#include "app/control/twid_control.h"
 
 //for int types
 #include <stdint.h>
@@ -66,24 +67,28 @@ typedef struct {
     double set_point;
 } test_config_t;
 
-/**
- * @brief Packet for raw telemetry
- * 
- */
-typedef union {
-    telemetry_t telemetry_struct;
-    char buffer[sizeof(telemetry_t)];
-} telemetry_packet_t;
-
 
 /******************************************************************************/
 /*                             F U N C T I O N S                              */
 /******************************************************************************/
 
-// read controller config strings, will return false if string is invalid/not recognized, 
-// otherwise will fill config struct
-cmd_type_t decode_config_cmd(String *, controller_context_t *);
+/**
+ * @brief Tries to interpret string as a command and executes the command
+ *        Returns cmd_type_t > 0 if the command was intereted and executed successfully
+ *        Otherwise cmd_type_t < 0
+ */
+cmd_type_t handle_command(String *);
 
+/**
+ * @brief read controller config strings, will return false if string is invalid/not recognized, 
+            otherwise will fill config struct
+ */
+cmd_type_t decode_config_cmd(String *, controller_config_t *);
+
+/**
+ * @brief Send ack message for cmd_type
+ * 
+ */
 void ack_cmd(cmd_type_t);
 
 /**
@@ -102,7 +107,7 @@ uint32_t publish_telemetry_serial_studio(telemetry_t *telem);
  * @brief Print controller config over serial port (if it is open)
  * 
  */
-uint32_t print_controller_cfg();
+uint32_t print_controller_cfg(twid_controller_t*);
 
 // read string until terminator
 String read_string_until(char terminator);

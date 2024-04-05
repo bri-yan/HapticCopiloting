@@ -55,6 +55,7 @@ void TaskReadTCommands(void *pvParameters);
 static const char* TAG = "twiddlerino_main";
 
 static QueueHandle_t xQueueTelemetry;
+
 static TaskHandle_t xTelemTask;
 static TaskHandle_t xCommandTask;
 static TaskHandle_t xTControlTask;
@@ -172,12 +173,28 @@ void TaskPublishTelemetry(void *pvParameters) {
   }
 
   telemetry_t t;
+  uint64_t last_time = millis();
 
   for(;;) 
   {
     if(enable_debug_telemetry && Serial.availableForWrite() && (xQueueReceive(xQueueTelemetry, &t, 20) == pdTRUE)){
       publish_telemetry_serial_studio(&t);
     }
+
+    if (millis() > last_time + FREE_RTOS_TELEM_SAMPLE_RATE) {
+      ESP_LOGI(TAG, "Number of freertos tasks running: %i", uxTaskGetNumberOfTasks());
+      TaskHandle_t handle_arr[3] = {xCommandTask, xTelemTask, xTControlTask};
+      for(int i=0;i<3;i++){
+        auto name = pcTaskGetName(handle_arr[i]);
+        auto mem = uxTaskGetStackHighWaterMark(handle_arr[i]);
+        auto state = eTaskStateGet(handle_arr[i]);
+        ESP_LOGI(TAG, "Task Status:\n\t*name:%s\tStatus:%i\tFree Stack Space:%u",
+        name, state, mem);
+      }
+
+      last_time = millis();
+    }
+
     vTaskDelay( 1 );
   }
 }
@@ -187,22 +204,44 @@ void TaskRunTControl(void *pvParameters){
     Serial.begin( UART_BAUD_RATE );//this is on rx0 tx0
     ESP_LOGI(TAG, "Serial connected on uart0!" );
   }
-  INIT_CONTROLLER_CONFIG_PARTIAL(control_config);
-  control_config.telem_queue_handle = &xQueueTelemetry;
-  auto mutex = xSemaphoreCreateMutex();
-  control_config.buffer_mutex = &mutex;
+
   ESP_LOGI(TAG, "T Control Task Initialized.\n");
 
-  //initial hardware state
-  encoder_clear_count(&encoder1_handle);
-  motor_set_state(&motor1_handle, motor_state_t::MOTOR_LOW);
-  tcontrol_cfg(&control_config);
-  tcontrol_start();
-  ESP_LOGI(TAG, "Controller runnning: %i\n",tcontrol_is_running());
+  //there's probably a better way to write the following section
+  // and name the variables
+  //this is prone to typos :)
+  INIT_CONTROLLER_CONFIG_PARTIAL(default_config);
+  controller1_handle->config = default_config;
+  controller1_handle->ctrl_id = TWID1_ID;
+  controller2_handle->config = default_config;
+  controller2_handle->ctrl_id = TWID2_ID;
+
+  controller1_handle->mutex = xSemaphoreCreateMutex();
+  controller2_handle->mutex = xSemaphoreCreateMutex();
+  
+  controller1_handle->telem_queue_handle = xQueueTelemetry;
+  controller2_handle->telem_queue_handle = xQueueTelemetry;
+
+  controller1_handle->motor_handle = &motor1_handle;
+  controller2_handle->motor_handle = &motor2_handle;
+
+  controller1_handle->encoder_handle = &encoder1_handle;
+  controller2_handle->encoder_handle = &encoder2_handle;
+
+  controller1_handle->current_sens_chan = curr_sens_adc_channel_t::CURRENT_SENSOR_1;
+  controller2_handle->current_sens_chan = curr_sens_adc_channel_t::CURRENT_SENSOR_2;
+
+  tcontrol_cfg(controller1_handle, &(controller1_handle->config));
+  tcontrol_cfg(controller2_handle, &(controller2_handle->config));
+  tcontrol_start(controller1_handle);
+  tcontrol_start(controller2_handle);
+
+  ESP_LOGI(TAG, "Controller %s loop status: %i\n", controller1_handle->ctrl_id,  tcontrol_is_running(controller1_handle));
+  ESP_LOGI(TAG, "Controller %s loop status: %i\n", controller2_handle->ctrl_id,  tcontrol_is_running(controller2_handle));
 
   for(;;)
   {
-    vTaskDelay(1);
+    vTaskDelay(10);
   }
 }
 
@@ -228,14 +267,20 @@ void TaskReadTCommands(void *pvParameters) {
       last_cmd = cmd_type_t::NA_CMD;
       ESP_LOGD(TAG, "Received data: %s\n", read_string);
 
-     if(read_string == "STOP" || read_string == "stop"){
+     if(read_string == "hello" || read_string == "ping"){
+        Serial.printf("esp_alive_signal\n");
+      } else if(read_string == "STOP" || read_string == "stop"){
         motor_fast_stop(&motor1_handle);
-        tcontrol_stop();
+        motor_fast_stop(&motor2_handle);
+        tcontrol_stop(controller1_handle);
+        tcontrol_stop(controller2_handle);
         last_cmd = cmd_type_t::STOP;
       } else if(read_string == "RESET" || read_string == "reset"){
         motor_fast_stop(&motor1_handle);
+        motor_fast_stop(&motor2_handle);
         reset_sent_count();
-        tcontrol_reset();
+        tcontrol_reset(controller1_handle);
+        tcontrol_reset(controller2_handle);
         last_cmd = cmd_type_t::RESET;
       } else if(read_string == "REBOOT" || read_string == "reboot"){
         last_cmd = cmd_type_t::REBOOT;
@@ -249,37 +294,8 @@ void TaskReadTCommands(void *pvParameters) {
       } else if(read_string == "telemetry_disable") {
         enable_debug_telemetry = false;
         last_cmd = cmd_type_t::TELEM_DISABLE;
-      } else if(read_string.substring(0,12) == "set_setpoint"){
-        double vals[4] = {0.0, 0.0, 0.0, 0.0};
-        extract_doubles(&read_string, vals, 4);
-  
-        setpoint_t sp;
-        sp.pos = vals[0];
-        sp.vel = vals[1];
-        sp.accel = vals[2];
-        sp.torque = vals[3];
-
-        tcontrol_update_setpoint(&sp);
-        ESP_LOGD(TAG, "Setpoint updated.\n");
-        last_cmd = cmd_type_t::SET_SETPOINT;
-      } else if(read_string.substring(0,13) == "set_dutycycle") {
-          int16_t i0 = read_string.indexOf(',',0);
-          i0+=1;
-          int16_t i = read_string.indexOf(',',i0);
-          int32_t dc = read_string.substring(i0,i).toInt();
-
-          motor_set_pwm(&motor1_handle, dc);
-          ESP_LOGD(TAG, "Set pwm duty cycle to %li with frequency %lu.\nMotor State: %i.\n",
-          motor_get_duty_cycle(&motor1_handle), motor_get_frequency(&motor1_handle), motor_get_state(&motor1_handle));
-          last_cmd = cmd_type_t::SET_DUTYCYCLE;
       } else {
-        controller_context_t cfg;
-        tcontrol_get_cfg(&cfg);
-        last_cmd = decode_config_cmd(&read_string, &cfg);
-        if(last_cmd>0){
-          tcontrol_update_cfg(&cfg);
-          ESP_LOGD(TAG, "Controller config updated.\n");
-        }
+        last_cmd = handle_command(&read_string);
       }
 
       ack_cmd(last_cmd);

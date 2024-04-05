@@ -22,11 +22,16 @@
 /*                               D E F I N E S                                */
 /******************************************************************************/
 
+//twid ids
+#define TWID1_ID "CONTROL_ONE"
+#define TWID2_ID "CONTROL_TWO"
+
 //command and telemetry config
 #define ENABLE_DEBUG_TELEMETRY_ON_INIT true
 #define TELEMETRY_QUEUE_SIZE 250U
 #define COMMAND_QUEUE_SIZE 10U
 #define TELEMETRY_DEFAULT_SAMPLE_RATE 20U //telemetry sample rate in (control loops)/sample
+#define FREE_RTOS_TELEM_SAMPLE_RATE 1000U //MS
 
 //hardware config
 //encoder
@@ -34,7 +39,7 @@
 #define ENCODER_CPR 500
 
 //serial port
-#define UART_BAUD_RATE 1000000U
+#define UART_BAUD_RATE 2000000U
 
 //motor
 #define MOTOR_MAX_SPEED_RPM 10000
@@ -49,7 +54,7 @@
 
 //macro for struct (partial) init to fill out default controller parameters
 //CHANGE CONTROLLER DEFAULT CONFIG HERE!!!!
-#define INIT_CONTROLLER_CONFIG_PARTIAL(X) controller_context_t X = {\
+#define INIT_CONTROLLER_CONFIG_PARTIAL(X) controller_config_t X = {\
     .control_type = control_type_t::POSITION_CTRL,\
     .setpoint_type = setpoint_type_t::CONSTANT_SETPOINT_MODE,\
     .init_setpoint = {.pos = 0.0, .vel = 0.0, .accel = 0.0, .torque = 0.0},\
