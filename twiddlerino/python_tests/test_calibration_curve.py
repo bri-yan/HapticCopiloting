@@ -44,5 +44,5 @@ async def test(twid:TwidSerialInterfaceProtocol):
         for val in current:
             f.write(f'{val},\n')
 
-run_test(SERIAL_PORT, SERIAL_BAUD_RATE, test)
+run_test(SERIAL_PORT, test)
 

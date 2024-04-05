@@ -4,16 +4,21 @@
 #
 #   Author: Yousif El-Wishahy (ywishahy@student.ubc.ca)
 #   2024-04-03
-import logging
 
-#import async for and serial_asycnc for protocol
+#logging imports
+import logging
+import time
+import os
+
+#async for and serial_asycnc for protocol
 import asyncio
 import serial_asyncio
 
-#data storage
+#data storage and handling
 from dataclasses import dataclass
 from enum import Enum
 import dataclasses
+import pandas
 
 #thread safe data transfer
 import queue
@@ -24,15 +29,14 @@ import socket
 #decoding
 import re
 
-import time
-
-import os
-
-import pandas
+#serial tools
+import serial
+import serial.tools.list_ports
 
 #external gui socket address
 SERIAL_STUDIO_HOST = '127.0.0.1'
 SERIAL_STUDIO_PORT = 15555
+SERIAL_BAUD_RATE = 2000000
 
 TELEMETRY_FRAME_LENGTH = 29
 
@@ -40,7 +44,7 @@ _LOG_NAME = 'TWIDDLERINO_SERIAL'
 _LOG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..','data','logs')
 _LOG_FILE = os.path.join(_LOG_DIR, f'{_LOG_NAME}_{time.strftime('%Y-%m-%d_%H-%M')}.log')
 _TELEM_LOG_FILE = os.path.join(_LOG_DIR, f'telemetry_frame_{time.strftime('%Y-%m-%d_%H-%M')}.log')
-_SERIALDEBUG_LOG_FILE = os.path.join(_LOG_DIR, f'serial_debug_dump_{time.strftime('%Y-%m-%d_%H-%M')}.log')
+_SERIALDEBUG_LOG_FILE = os.path.join(_LOG_DIR, f'serial_debug_dump_{time.strftime('%Y-%m-%d_%H-%M')}.log')      
 
 #python copy of control_type_t in esp32 firmware
 class ControlType(Enum):
@@ -73,6 +77,10 @@ class CommandType(Enum):
     SET_MULTISETPOINT_VELOCITY = 13
     SET_MULTISETPOINT_ACCELERATION = 14
     SET_MULTISETPOINT_TORQUE = 15
+    
+class TwidID(Enum):
+    TWID1_ID = 'CONTROL_ONE'
+    TWID2_ID = 'CONTROL_TWO'
 
 @dataclass
 class TelemetryFrame:
@@ -165,6 +173,7 @@ class TwidSerialInterfaceProtocol(asyncio.Protocol):
         self._telem_after_reboot = asyncio.Event()
         self._reboot_flag = asyncio.Event()
         self._wait_for_param_flag = asyncio.Event()
+        self._is_alive_flag = asyncio.Event()
         self._wait_for_name = None
         self._wait_for_value = None
 
@@ -199,15 +208,16 @@ class TwidSerialInterfaceProtocol(asyncio.Protocol):
 
     def connection_made(self, transport) -> None:
         self._loop = asyncio.get_event_loop()
-        self.frames = queue.Queue(0)
+        self.frames = queue.Queue(1000)
+        self.socket_write_buffer:queue.Queue = queue.Queue(1000)
+
         self.frame_count = 0
         self.err_frame_count = 0
         self.buffer = b''
-        self.socket_write_buffer:queue.Queue = queue.Queue(1000)
         self.transport = transport
         self.transport.resume_reading()
-        self._conn_flag.set()
         self._logger.info(f'port opened {transport}')
+        self._conn_flag.set()
     
     def connection_lost(self, exc):
         self._logger.info(f'{TwidSerialInterfaceProtocol.__name__} connection lost')
@@ -215,15 +225,15 @@ class TwidSerialInterfaceProtocol(asyncio.Protocol):
         self._logger.info(f'set stop flag @ {self._stop_flag}')
 
     def data_received(self, data) -> None:
+        if b'esp_alive_signal' in data:
+            self._is_alive_flag.set()
+        if not self._conn_flag.is_set():
+            self._conn_flag.set()
         #echo to socket buffer
         if self.socket_write_buffer.full():
-            try:
-                self.socket_write_buffer.get_nowait()
-            except Exception as errmsg:
-                self._logger.error(errmsg)
-                with self.socket_write_buffer.mutex:
-                    self.socket_write_buffer.queue.clear()
-                    self._logger.warn(f'emptied queue {self.socket_write_buffer}')
+            with self.socket_write_buffer.mutex:
+                self.socket_write_buffer.queue.clear()
+                self._logger.warn(f'emptied queue {self.socket_write_buffer}')
         self.socket_write_buffer.put(data)
 
         #add buffer (it could be empty)
@@ -289,10 +299,11 @@ class TwidSerialInterfaceProtocol(asyncio.Protocol):
                         processed = True
             if not processed and len(line) > 1:
                 self._serial_dump_logger.debug(line)
-                if i < len(data_lines) - 1:
-                    self.buffer += line + b'\n'
-                else:
-                    self.buffer += b'\n' + line
+                if b'/*T' in line or b'/**' in line or b'**/' in line:
+                    if i < len(data_lines) - 1:
+                        self.buffer += line + b'\n'
+                    else:
+                        self.buffer += b'\n' + line
 
     def pause_reading(self) -> None:
         # This will stop the callbacks to data_received
@@ -323,11 +334,27 @@ class TwidSerialInterfaceProtocol(asyncio.Protocol):
                 t.control_type = ControlType((num,name))
         return t
 
+    async def is_alive(self, timeout=1):
+        self._is_alive_flag.clear()
+        starttime = time.time()
+        while time.time() < starttime + timeout:
+            self.transport.write(b'ping\n')
+            try: 
+                await asyncio.wait_for(self._is_alive_flag.wait(), timeout/100)
+            except:
+                continue
+        return self._is_alive_flag.is_set()
+
     #blocking function that returns true when command to twid is acknowledged with correct code
     #this is a awaitable function
     #if blocking is set to false, send command will not wait for acknowledgement
-    async def send_cmd(self, cmd_bytes:bytes, cmd_type:CommandType, blocking=True, timeout=0.25, reboot_timeout=10) -> bool:
+    async def send_cmd(self, cmd_bytes:bytes, cmd_type:CommandType, twid_id:TwidID=TwidID.TWID1_ID, blocking=True, timeout=0.5, reboot_timeout=10) -> bool:
         self._last_ack_payload = CommandType.NA_CMD
+        try:
+            i = cmd_bytes.index(b',')
+            cmd_bytes = cmd_bytes[:i+1] + bytes(twid_id.value,"utf-8") + b',' + cmd_bytes[i+1:]
+        except:
+            pass
         self._ack_flag.clear()
         self.write(cmd_bytes)
         self._logger.info(f'sent command of type {cmd_type}\tcommand frame bytes:\t{cmd_bytes}')
@@ -340,7 +367,7 @@ class TwidSerialInterfaceProtocol(asyncio.Protocol):
                 self._logger.warn(f'wait for command timed out for command of type {cmd_type}')
                 return False
             
-            if cmd_type == CommandType.RESET or cmd_type == CommandType.REBOOT:
+            if cmd_type == CommandType.REBOOT:
                 self._telem_after_reboot.clear()
                 self._logger.debug(f'cleared telem_after_reboot flag @ {self._telem_after_reboot}')
                 self._reboot_flag.set()
@@ -510,8 +537,36 @@ async def start_protocol(loop, serial_port, baud_rate) -> TwidSerialInterfacePro
     await twid._conn_flag.wait()
     return twid
 
-def run_test(serial_port, baud_rate, *args):
+#serial port search utility
+def search_ports(baud_rate):
+    print('Searching for twiddlerino port...')
+    ports = serial.tools.list_ports.comports(include_links=False)
+    
+    for port in ports :
+        print(f'Checking {port.device}')
+
+        try:
+            ser = serial.Serial(port.device, baud_rate, timeout=0.1)
+        except Exception as errmsg:
+            print(errmsg)
+            continue
+
+        if ser.is_open:
+            start = time.time()
+            while time.time() < start + 1:
+                ser.write(b'ping\n')
+                l = ser.readline()
+                print(l)
+                if b'esp_alive_signal' in l:
+                    ser.close()
+                    print(f'Found esp port: {port.device}')
+                    return port.device
+            ser.close()
+    
+    raise Exception('Could not find esp port')
+
+def run_test(serial_port, *args):
     loop = asyncio.get_event_loop()
-    twid = loop.run_until_complete(start_protocol(loop,serial_port,baud_rate))
+    twid = loop.run_until_complete(start_protocol(loop,serial_port,SERIAL_BAUD_RATE))
     twid._logger.info(f'running functions test(s):\t {[arg.__name__ for arg in args]}')
     loop.run_until_complete(asyncio.gather(run_socket_server_async(twid), *[arg(twid) for arg in args]))

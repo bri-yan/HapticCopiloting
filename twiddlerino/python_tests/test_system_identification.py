@@ -25,7 +25,6 @@ import os
 
 ###SERIAL CONFIGURATION for esp32
 SERIAL_PORT = 'COM9'
-SERIAL_BAUD_RATE = 1000000
 
 #MOTOR EMPIRCAL PARAMS
 
@@ -92,5 +91,5 @@ async def current_step_response_test(twid:TwidSerialInterfaceProtocol):
 async def position_step_response_test(twid:TwidSerialInterfaceProtocol):
     pass
 
-run_test(SERIAL_PORT, SERIAL_BAUD_RATE, current_step_response_test)
+run_test(SERIAL_PORT, current_step_response_test)
 

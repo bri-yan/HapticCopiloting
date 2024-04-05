@@ -8,11 +8,10 @@ import numpy as np
 
 import asyncio
 import serial_asyncio
-from serial_interface.serial_interface import TwidSerialInterfaceProtocol, TelemetryFrame, run_test, ControlType, CommandType
+from serial_interface.serial_interface import TwidSerialInterfaceProtocol, TelemetryFrame, run_test, ControlType, CommandType, TwidID
 
 ###SERIAL CONFIGURATION for esp32
 SERIAL_PORT = 'COM9'
-SERIAL_BAUD_RATE = 1000000
 
 async def serial_test(twid:TwidSerialInterfaceProtocol):
     assert await twid.update_telem_sample_rate(5)
@@ -28,19 +27,15 @@ async def serial_test(twid:TwidSerialInterfaceProtocol):
         print(f'actual val:{val}')
 
     assert await twid.send_cmd(bytes(f'aggasdfhhsdf\n',"utf-8"), CommandType.NA_CMD)
-    assert await twid.send_cmd(bytes(f'set_mode,no_control,\n',"utf-8"), CommandType.SET_MODE)
+    assert await twid.send_cmd(bytes(f'set_mode,no_control,\n',"utf-8"), CommandType.SET_MODE, twid_id=TwidID.TWID2_ID)
     assert await twid.send_cmd(bytes(f'set_dutycycle,0,\n',"utf-8"), CommandType.SET_DUTYCYCLE)
     assert await twid.send_cmd(bytes(f'reset\n',"utf-8"), CommandType.RESET)
     assert await twid.send_cmd(bytes(f'reboot\n',"utf-8"), CommandType.REBOOT)
-    
-    sp = (360*np.sin(np.linspace(-np.pi,np.pi,10))).tolist()
-    # assert await twid.update_pos_setpoint_mulitple(sp)
-    # await asyncio.sleep(10)
-    
-    assert await twid.update_telem_sample_rate(10)
-    out = await twid.collect_telem()
-    print(len(out))
+
+    assert await twid.update_telem_sample_rate(5)
+    out = await twid.collect_telem(1, False)
+    print(out)
     
     await twid.end()
 
-run_test(SERIAL_PORT, SERIAL_BAUD_RATE, serial_test)
+run_test(SERIAL_PORT, serial_test)
