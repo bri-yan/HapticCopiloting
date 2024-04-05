@@ -118,7 +118,7 @@ int32_t motor_set_pwm(int32_t dc)
 
 motor_state_t motor_set_state(motor_state_t state)
 {
-   ESP_LOGD(TAG,"motor_set_state to %i called", state);
+   ESP_LOGV(TAG,"motor_set_state to %i called", state);
    switch(state)
    {
      case motor_state_t::MOTOR_DRIVE_CCW:

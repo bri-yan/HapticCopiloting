@@ -69,8 +69,6 @@ static EwmaFilter velocity_filt_ewa(controller_config.velocity_filter_const, 0.0
 static EwmaFilter current_filt_ewa(controller_config.current_filter_const, 0.0);
 static DiscretePID pid_controller(&controller_config);
 
-static setpoint_buffer_type_t setpoint_buffer;
-
 //pid timer handle
 //https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/system/esp_timer.html
 static esp_timer_handle_t pid_timer;
@@ -96,8 +94,6 @@ void tcontrol_cfg(controller_context_t* config) {
     pid_controller = DiscretePID(&controller_config);
     telem.current_sps = current_sensor_sps();
     telem.nframes_sent_queue = 0;
-    config->setpoint_buffer = &setpoint_buffer;
-    config->setpoint_buffer->clear();
 
     const esp_timer_create_args_t timer_args = {
         .callback = pid_callback,
@@ -137,7 +133,6 @@ void tcontrol_reset(){
     tcontrol_stop();
     INIT_CONTROLLER_CONFIG_PARTIAL(def);
     def.telem_queue_handle = controller_config.telem_queue_handle;
-    def.setpoint_buffer = controller_config.setpoint_buffer;
     controller_config = def;
     tcontrol_cfg(&controller_config);
     tcontrol_start();
@@ -186,6 +181,7 @@ void tcontrol_update_cfg(controller_context_t* cfg) {
 
 static void pid_callback(void *args)
 {
+    ESP_LOGV(TAG, "entered pid callback");
     //sensor read segment 
     telem.timestamp_ms = (micros() - start_time)/1000.0;
     telem.loop_dt = micros() - last_time;
@@ -225,13 +221,6 @@ static void pid_callback(void *args)
     auto output_signal = 0.0;
     auto setpoint_signal = 0.0;
 
-    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-    xSemaphoreTakeFromISR(*controller_config.buffer_mutex, &xHigherPriorityTaskWoken);
-    if (!controller_config.setpoint_buffer->isEmpty()) {
-        setpoint = controller_config.setpoint_buffer->shift();
-    }
-    xSemaphoreGiveFromISR(*controller_config.buffer_mutex, &xHigherPriorityTaskWoken);
-
     //ratio between real (empircal) and desired inertia
     auto jjv = controller_config.motor_J / controller_config.impedance.J;
 
@@ -260,7 +249,6 @@ static void pid_callback(void *args)
             //feeback signal is current
             feedback_signal = telem.current;
             break;
-
         case control_type_t::IMPEDANCE_CTRL_DAMPING:
             //apply damping impedance law
             setpoint_signal = 
@@ -310,14 +298,6 @@ static void pid_callback(void *args)
     output_signal = pid_controller.compute(feedback_signal, setpoint_signal);
     telem.error = pid_controller.get_error();
 
-    // if(ENABLE_OUTPUT_SIGNAL_CORRECTION) {
-    //     if (telem.error > OUTPUT_SIGNAL_CORRECTION_THRESHOLD) {
-    //         output_signal += OUTPUT_SIGNAL_CORRECTION_VALUE;
-    //     } else {
-    //         output_signal -= OUTPUT_SIGNAL_CORRECTION_VALUE;
-    //     }
-    // }
-
     //apply control signal
     if(controller_config.control_type != control_type_t::NO_CTRL) {
         motor_set_pwm(output_signal);
@@ -336,8 +316,9 @@ static void pid_callback(void *args)
     telem.Kd = controller_config.Kd;
     telem.impedance = controller_config.impedance;
     telem.control_type = controller_config.control_type;
-    
+
     if((itr % controller_config.telemetry_sample_rate) == 0 && controller_config.telem_queue_handle != NULL) {
+        BaseType_t xHigherPriorityTaskWoken = pdFALSE;
         xHigherPriorityTaskWoken = pdFALSE;
         telem.nframes_sent_queue+=1;
         xQueueSendFromISR(*controller_config.telem_queue_handle, &telem, &xHigherPriorityTaskWoken);

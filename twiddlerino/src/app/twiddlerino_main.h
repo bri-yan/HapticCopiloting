@@ -24,21 +24,12 @@
 /*                              T Y P E D E F S                               */
 /******************************************************************************/
 
-/**
- * @brief Twiddlerino Startup State
- * 
- */
-typedef enum {
-    IDLE,
-    RUN_CONTROLLER_DEFAULT
-} startup_type_t;
-
 /******************************************************************************/
 /*                             F U N C T I O N S                              */
 /******************************************************************************/
 
 //initializes Twiddlerino
-void twiddlerino_setup(startup_type_t startup_type = startup_type_t::IDLE);
+void twiddlerino_setup();
 
 #endif //TWIDDLERINO_H_
 

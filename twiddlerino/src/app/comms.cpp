@@ -38,12 +38,13 @@
 
 static char timed_read();
 
-static void insert_setpoint_buffer(cmd_type_t cmd, String * str, setpoint_buffer_type_t* buffer, SemaphoreHandle_t* mutex, uint16_t num_values);
+static void insert_setpoint_buffer(cmd_type_t cmd, String * str, setpoint_t* buffer, SemaphoreHandle_t* mutex, uint16_t num_values);
 
 /******************************************************************************/
 /*               P R I V A T E  G L O B A L  V A R I A B L E S                */
 /******************************************************************************/
 
+static const char* TAG = "comms";
 static uint32_t nframes_sent_serial = 0;
 
 /******************************************************************************/
@@ -51,6 +52,7 @@ static uint32_t nframes_sent_serial = 0;
 /******************************************************************************/
 
 cmd_type_t decode_config_cmd(String *str, controller_context_t *cfg) {
+    ESP_LOGD(TAG, "Recived cmd string %s", *str);
     if(str->substring(0,7).compareTo("set_pid") == 0){
         double vals[3] = {0.0 ,0.0, 0.0};
         extract_doubles(str, vals, 3);
@@ -106,32 +108,33 @@ cmd_type_t decode_config_cmd(String *str, controller_context_t *cfg) {
             return cmd_type_t::SET_TELEMSAMPLERATE;
         }
     } else if(str->substring(0,17) == "set_multisetpoint") {
-        int16_t i0 = str->indexOf(',',0);
-        i0+=1;
-        int16_t i = str->indexOf(',',i0);
-        auto name = str->substring(i0,i);
+        return cmd_type_t::NA_CMD;
+        // int16_t i0 = str->indexOf(',',0);
+        // i0+=1;
+        // int16_t i = str->indexOf(',',i0);
+        // auto name = str->substring(i0,i);
 
-        auto cmd = cmd_type_t::NA_CMD;
-        Serial.printf("%s",name);
-        if (name=="position") {
-            cmd = cmd_type_t::SET_MULTISETPOINT_POSITION;
-        } else if (name=="velocity") {
-            cmd = cmd_type_t::SET_MULTISETPOINT_VELOCITY;
-        } else if (name=="acceleration") {
-            cmd = cmd_type_t::SET_MULTISETPOINT_ACCELERATION;
-        } else if (name=="torque") {
-            cmd = cmd_type_t::SET_MULTISETPOINT_TORQUE;
-        }
+        // auto cmd = cmd_type_t::NA_CMD;
+        // Serial.printf("%s",name);
+        // if (name=="position") {
+        //     cmd = cmd_type_t::SET_MULTISETPOINT_POSITION;
+        // } else if (name=="velocity") {
+        //     cmd = cmd_type_t::SET_MULTISETPOINT_VELOCITY;
+        // } else if (name=="acceleration") {
+        //     cmd = cmd_type_t::SET_MULTISETPOINT_ACCELERATION;
+        // } else if (name=="torque") {
+        //     cmd = cmd_type_t::SET_MULTISETPOINT_TORQUE;
+        // }
 
-        if (cmd >= cmd_type_t::SET_MULTISETPOINT_POSITION && cmd <= cmd_type_t::SET_MULTISETPOINT_TORQUE ) {
-            i0 = i+1;
-            i = str->indexOf(',',i0);
-            auto num_vals = (uint32_t)str->substring(i0,i).toInt();
-            auto vals = str->substring(i);
-            insert_setpoint_buffer(cmd, &vals, cfg->setpoint_buffer, cfg->buffer_mutex, num_vals);
-        }
+        // if (cmd >= cmd_type_t::SET_MULTISETPOINT_POSITION && cmd <= cmd_type_t::SET_MULTISETPOINT_TORQUE ) {
+        //     i0 = i+1;
+        //     i = str->indexOf(',',i0);
+        //     auto num_vals = (uint32_t)str->substring(i0,i).toInt();
+        //     auto vals = str->substring(i);
+        //     insert_setpoint_buffer(cmd, &vals, (setpoint_t*)cfg->setpoint_buffer, cfg->buffer_mutex, num_vals);
+        // }
 
-        return cmd;
+        // return cmd;
     }
 
     return cmd_type_t::NA_CMD;
@@ -148,6 +151,7 @@ uint32_t publish_telemetry(telemetry_t *telem) {
 }
 
 void ack_cmd(cmd_type_t cmd) {
+    ESP_LOGD(TAG, "acknowledging command %i", cmd);
     Serial.printf("/*TWIDDLERINO_ACK,%i*/\n",(int16_t)cmd);
 }
 
@@ -208,7 +212,8 @@ void extract_doubles(String * str, double* out, uint16_t num_values) {
 }
 
 static void insert_setpoint_buffer(cmd_type_t cmd, String * str, 
-setpoint_buffer_type_t* buffer, SemaphoreHandle_t* mutex, uint16_t num_values) {
+setpoint_t* buffer, SemaphoreHandle_t* mutex, uint16_t num_values) {
+    ESP_LOGD(TAG, "Trying to insert %i setpoints into buffer", num_values);
     int32_t i = 0, i0 = 0;
     for(int j = 0; j < num_values; j++) {
         i0 = str->indexOf(",",i0);
@@ -238,14 +243,10 @@ setpoint_buffer_type_t* buffer, SemaphoreHandle_t* mutex, uint16_t num_values) {
                 return;
         }
         xSemaphoreTake(*mutex, portMAX_DELAY);
-        buffer->push(sp);
+        buffer[i] = sp;
         xSemaphoreGive(*mutex);
         i++;
     }
-
-    xSemaphoreTake(*mutex, portMAX_DELAY);
-    Serial.printf("Setpoint buffer updated: %i",buffer->size());
-    xSemaphoreGive(*mutex);
 }
 
 void reset_sent_count() {

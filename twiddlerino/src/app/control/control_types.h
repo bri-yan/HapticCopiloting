@@ -17,9 +17,6 @@
 
 #include "Arduino.h"
 
-#define CIRCULAR_BUFFER_INT_SAFE
-#include <CircularBuffer.hpp>
-
 /******************************************************************************/
 /*                              T Y P E D E F S                               */
 /******************************************************************************/
@@ -122,17 +119,12 @@ typedef struct {
     uint32_t nframes_sent_queue;
 } telemetry_t;
 
-
-#define SETPOINT_BUFFER_SIZE 100U
-typedef CircularBuffer<setpoint_t, SETPOINT_BUFFER_SIZE> setpoint_buffer_type_t; 
-
 /**
  * @brief Controller configuration
  */
 typedef struct {
     //telemetry
     QueueHandle_t* telem_queue_handle;
-    setpoint_buffer_type_t* setpoint_buffer;   
     SemaphoreHandle_t* buffer_mutex;
 
     //config

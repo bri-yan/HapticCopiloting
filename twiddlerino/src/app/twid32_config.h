@@ -11,7 +11,6 @@
 /******************************************************************************/
 /*                              I N C L U D E S                               */
 /******************************************************************************/
-
 //need to import controller config struct definition
 #include "app/control/control_types.h"
 
@@ -26,6 +25,7 @@
 #define TELEMETRY_QUEUE_SIZE 250U
 #define COMMAND_QUEUE_SIZE 10U
 #define TELEMETRY_DEFAULT_SAMPLE_RATE 20U //telemetry sample rate in (control loops)/sample
+
 
 //hardware config
 //encoder

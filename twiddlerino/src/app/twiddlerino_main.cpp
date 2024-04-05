@@ -71,7 +71,7 @@ static bool enable_debug_telemetry = ENABLE_DEBUG_TELEMETRY_ON_INIT;
 /*                       P U B L I C  F U N C T I O N S                       */
 /******************************************************************************/
 
-void twiddlerino_setup(startup_type_t startup_type) {
+void twiddlerino_setup() {
   if(!Serial) {
     Serial.begin( UART_BAUD_RATE );//this is on rx0 tx0
     ESP_LOGI(TAG, "Serial connected on uart0! with baud rate %lu\n",UART_BAUD_RATE);
@@ -79,12 +79,6 @@ void twiddlerino_setup(startup_type_t startup_type) {
 
   //queues for communicating with the control core
   xQueueTelemetry = xQueueCreate(TELEMETRY_QUEUE_SIZE, sizeof(telemetry_t));
-
-  //after this , if we want to idle dont run any tasks
-  if (startup_type == startup_type_t::IDLE) {
-    ESP_LOGI(TAG, "Entering idle mode");
-    return;
-  }
 
   //hardware setup
   ESP_LOGI(TAG, "Hardware setup started");
@@ -104,7 +98,7 @@ void twiddlerino_setup(startup_type_t startup_type) {
     , &xCommandTask
     , CORE_SERIAL_READ_TASK
   );
-  ESP_LOGI(TAG, "Parameter Update Task Initialized. Waiting for param update commands. Task Status: %i\n",eTaskGetState(xCommandTask));
+  ESP_LOGI(TAG, "Command Task Initialized. Task Status: %i\n",eTaskGetState(xCommandTask));
 
   //start telemetry on core 0
   xTaskCreatePinnedToCore(
@@ -118,18 +112,17 @@ void twiddlerino_setup(startup_type_t startup_type) {
   );
   ESP_LOGI(TAG, "Telemetry Task Initialized. Task Status: %i\n",eTaskGetState(xTelemTask));
   
-  if (startup_type == startup_type_t::RUN_CONTROLLER_DEFAULT) {
-    //start task
-    xTaskCreatePinnedToCore(
-      TaskRunTControl
-      ,  "Twiddlerino T Control"
-      ,  8192
-      ,  NULL
-      ,  TASK_PRIORITY_CONTROL
-      ,  &xTControlTask
-      ,  CORE_CONTROL_TASK
-    );
-  }
+  //start task
+  xTaskCreatePinnedToCore(
+    TaskRunTControl
+    ,  "Twiddlerino T Control"
+    ,  8192
+    ,  NULL
+    ,  TASK_PRIORITY_CONTROL
+    ,  &xTControlTask
+    ,  CORE_CONTROL_TASK
+  );
+  ESP_LOGI(TAG, "Control Task Initialized. Task Status: %i\n",eTaskGetState(xTControlTask));
 }
 
 /******************************************************************************/
