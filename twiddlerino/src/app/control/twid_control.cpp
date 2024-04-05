@@ -158,6 +158,8 @@ static void pid_callback(void *args)
 
     ESP_LOGV(TAG, "entered pid callback for controller id: %s", ctrl->ctrl_id);
 
+    ctrl->telem.ctrl_id = ctrl->ctrl_id;
+
     //sensor read segment 
     ctrl->telem.timestamp_ms = (micros() - ctrl->start_time)/1000.0;
     ctrl->telem.loop_dt = micros() - ctrl->last_time;

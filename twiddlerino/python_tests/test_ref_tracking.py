@@ -6,8 +6,6 @@ import time
 
 ###SERIAL CONFIGURATION for esp32
 SERIAL_PORT = 'COM9'
-SERIAL_BAUD_RATE = 100000
-
 DATA_DIR_PATH = os.path.join(os.getcwd(),'data')
 
 async def ref_track_test(twid:TwidSerialInterfaceProtocol):

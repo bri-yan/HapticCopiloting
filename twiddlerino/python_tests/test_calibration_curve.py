@@ -30,7 +30,7 @@ async def test(twid:TwidSerialInterfaceProtocol):
         #wait 1 sec until steady state
         await asyncio.sleep(1.0)
         
-        frame = twid.last_frame
+        frame = twid.last_frame_t1
         dc.append(frame.pwm_duty_cycle)
         current.append(frame.current)
         print(f'dutycycle: {dc[-1]:.2f}\tcurrent: {current[-1]:.3f}')

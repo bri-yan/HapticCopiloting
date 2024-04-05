@@ -35,10 +35,10 @@ async def test(twid:TwidSerialInterfaceProtocol):
         #wait 1 sec until steady state
         await asyncio.sleep(1.0)
 
-        data['dc'].append(twid.last_frame.pwm_duty_cycle)
-        data['volts_approx'].append(twid.last_frame.pwm_duty_cycle/1024 * PWM_AMPLITUDE)
-        data['current'].append(twid.last_frame.current)
-        data['vel_filtered'].append(twid.last_frame.filtered_velocity)
+        data['dc'].append(twid.last_frame_t1.pwm_duty_cycle)
+        data['volts_approx'].append(twid.last_frame_t1.pwm_duty_cycle/1024 * PWM_AMPLITUDE)
+        data['current'].append(twid.last_frame_t1.current)
+        data['vel_filtered'].append(twid.last_frame_t1.filtered_velocity)
         print(f'progress:{i/dcspan.size*100:.2f} %\tdc:{data['dc'][-1]}\tamps:{data['current'][-1]}\trpm:{data['vel_filtered'][-1]}')
     await twid.end()
 

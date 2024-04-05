@@ -1,4 +1,4 @@
-# serial_interface.py v2.5
+# serial_interface.py v2.6
 #   A python serial based protocol with an esp32 for a haptic virtual environment
 #   Also shares telemetry data over tcp socket - this can be accessed by other GUI software such as serial studio
 #
@@ -37,8 +37,6 @@ import serial.tools.list_ports
 SERIAL_STUDIO_HOST = '127.0.0.1'
 SERIAL_STUDIO_PORT = 15555
 SERIAL_BAUD_RATE = 2000000
-
-TELEMETRY_FRAME_LENGTH = 29
 
 _LOG_NAME = 'TWIDDLERINO_SERIAL'
 _LOG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..','data','logs')
@@ -81,18 +79,22 @@ class CommandType(Enum):
 class TwidID(Enum):
     TWID1_ID = 'CONTROL_ONE'
     TWID2_ID = 'CONTROL_TWO'
-
+    
+    
+TELEMETRY_FRAME_LENGTH = 30
 @dataclass
 class TelemetryFrame:
     """
     Telemetry frame received from the esp32
 
-    Telemetry frame formatting: "/*TWIDDLERINO_TELEMETRY,%lu,%lu,%lu,%lu,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lu,%lu,%i*/\n", 
+    Telemetry frame formatting: "TWIDDLERINO_TELEMETRY,%lu,%lu,%lu,%lu,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lu,%lu,%i,%lf,%s**/\n"
+            telemetry values from struct telemetry_t (in order): 
             t.timestamp_ms, t.loop_dt, t.control_dt, t.read_dt, 
             t.pwm_duty_cycle, t.pwm_frequency, 
             t.position, t.velocity, t.filtered_velocity, t.current, t.filtered_current, t.torque_external, t.torque_control, t.torque_net,
             t.setpoint.pos, t.setpoint.vel, t.setpoint.accel, t.setpoint.torque,
-            t.Kp, t.Ki, t.Kd, t.impedance.K, t.impedance.B, t.impedance.J, t.nframes_sent_queue, nframes_sent_serial, (int16_t)t.control_type
+            t.Kp, t.Ki, t.Kd, t.impedance.K, t.impedance.B, t.impedance.J, t.nframes_sent_queue, 
+            nframes_sent_serial, (int16_t)t.control_type, t.current_sens_adc_volts, t.ctrl_id
     """
     timestamp_ms:int=0
     loop_dt:int=0
@@ -135,10 +137,15 @@ class TelemetryFrame:
     
     #control type id
     control_type_val:int=0
-    control_type:ControlType= ControlType(ControlType.NO_CTRL)
     
     #adc volts
     current_sens_adc_voltage:float = 0
+    
+    #controller id
+    twid_id_val:str = ''
+    
+    control_type:ControlType= ControlType(ControlType.NO_CTRL)
+    twid_id:TwidID = None
 
 #serial async protocol for interfacing with the twiddlerino
 class TwidSerialInterfaceProtocol(asyncio.Protocol):
@@ -151,8 +158,6 @@ class TwidSerialInterfaceProtocol(asyncio.Protocol):
     """
     frame_count:int = 0
     err_frame_count:int = 0
-    last_frame:TelemetryFrame = None
-    frames:queue.Queue = queue.Queue(0)
     buffer:bytes = b''
     transport:serial_asyncio.SerialTransport
     datafields:list[str] = [field.name for field in dataclasses.fields(TelemetryFrame)]
@@ -174,6 +179,7 @@ class TwidSerialInterfaceProtocol(asyncio.Protocol):
         self._reboot_flag = asyncio.Event()
         self._wait_for_param_flag = asyncio.Event()
         self._is_alive_flag = asyncio.Event()
+        self._wait_for_twid_id = None
         self._wait_for_name = None
         self._wait_for_value = None
 
@@ -208,7 +214,8 @@ class TwidSerialInterfaceProtocol(asyncio.Protocol):
 
     def connection_made(self, transport) -> None:
         self._loop = asyncio.get_event_loop()
-        self.frames = queue.Queue(1000)
+        self._frame_queues = {TwidID.TWID1_ID:queue.Queue(1000), TwidID.TWID2_ID:queue.Queue(1000)}
+
         self.socket_write_buffer:queue.Queue = queue.Queue(1000)
 
         self.frame_count = 0
@@ -218,6 +225,14 @@ class TwidSerialInterfaceProtocol(asyncio.Protocol):
         self.transport.resume_reading()
         self._logger.info(f'port opened {transport}')
         self._conn_flag.set()
+        
+    @property
+    def frames_t1(self) -> queue.Queue:
+        return self._frame_queues[TwidID.TWID1_ID]
+
+    @property
+    def frames_t2(self) -> queue.Queue:
+        return self._frame_queues[TwidID.TWID2_ID] 
     
     def connection_lost(self, exc):
         self._logger.info(f'{TwidSerialInterfaceProtocol.__name__} connection lost')
@@ -273,14 +288,19 @@ class TwidSerialInterfaceProtocol(asyncio.Protocol):
                     #if we decoded a frame
                     if frame is not None:
                         self._telem_logger.info(frame)
-                        self.last_frame = frame
                         self.frame_count+=1
-
+                        self.latest_frame = frame
+                        if frame.twid_id == TwidID.TWID1_ID:
+                            self.latest_frame_t1 = frame
+                        else:
+                            self.latest_frame_t2 = frame
+                        
                         #add to queue
-                        if self.frames.full():
-                            self._logger.warn(f'telemetry frame queue full (qsize {self.frames.qsize()})')
-                            self.frames.get_nowait()
-                        self.frames.put(frame)
+                        if self._frame_queues[frame.twid_id].full():
+                            self._logger.warn(f'telemetry frame queue {self._frame_queues[frame.twid_id]} is full (qsize {self._frame_queues[frame.twid_id].qsize()})')
+                            self._frame_queues[frame.twid_id].get_nowait()
+                            self._frame_queues[frame.twid_id].put(frame)
+                        self._frame_queues[frame.twid_id].put(frame)
 
                         #handle telemetry received after reboot flag
                         if self._reboot_flag.is_set():
@@ -290,11 +310,12 @@ class TwidSerialInterfaceProtocol(asyncio.Protocol):
                             self._logger.debug(f'set telem_after_reboot flag @ {self._telem_after_reboot}')
 
                         #handle waiting for specific parameter flag
-                        if self._wait_for_name is not None:
-                            if getattr(frame, self._wait_for_name) == self._wait_for_value:
-                                self._wait_for_param_flag.set()
-                                self._logger.debug(f'wait for param {self._wait_for_name} has matched value {self._wait_for_value}')
-                                self._logger.debug(f'set wait_for_param_flag flag @ {self._wait_for_param_flag}')
+                        if frame.twid_id == self._wait_for_twid_id: 
+                            if self._wait_for_name is not None:
+                                if getattr(frame, self._wait_for_name) == self._wait_for_value:
+                                    self._wait_for_param_flag.set()
+                                    self._logger.debug(f'wait for param {self._wait_for_name} has matched value {self._wait_for_value}')
+                                    self._logger.debug(f'set wait_for_param_flag flag @ {self._wait_for_param_flag}')
                         
                         processed = True
             if not processed and len(line) > 1:
@@ -327,11 +348,15 @@ class TwidSerialInterfaceProtocol(asyncio.Protocol):
         t = TelemetryFrame()
         count: int = 0
         for item in spl:
-            setattr(t,self.datafields[count],float(item))
+            if item.isnumeric():
+                setattr(t,self.datafields[count],float(item))
+            else:
+                setattr(t,self.datafields[count],item)
             count+=1
         for num, name in TwidSerialInterfaceProtocol.control_value_fields:
             if num == t.control_type_val:
                 t.control_type = ControlType((num,name))
+        t.twid_id = TwidID(t.twid_id_val)
         return t
 
     async def is_alive(self, timeout=1):
@@ -348,13 +373,14 @@ class TwidSerialInterfaceProtocol(asyncio.Protocol):
     #blocking function that returns true when command to twid is acknowledged with correct code
     #this is a awaitable function
     #if blocking is set to false, send command will not wait for acknowledgement
-    async def send_cmd(self, cmd_bytes:bytes, cmd_type:CommandType, twid_id:TwidID=TwidID.TWID1_ID, blocking=True, timeout=0.5, reboot_timeout=10) -> bool:
+    async def send_cmd(self, cmd_bytes:bytes, cmd_type:CommandType, twid_id:TwidID=None, blocking=True, timeout=0.5, reboot_timeout=10) -> bool:
         self._last_ack_payload = CommandType.NA_CMD
-        try:
-            i = cmd_bytes.index(b',')
-            cmd_bytes = cmd_bytes[:i+1] + bytes(twid_id.value,"utf-8") + b',' + cmd_bytes[i+1:]
-        except:
-            pass
+        if twid_id is not None:
+            try:
+                i = cmd_bytes.index(b',')
+                cmd_bytes = cmd_bytes[:i+1] + bytes(twid_id.value,"utf-8") + b',' + cmd_bytes[i+1:]
+            except:
+                pass
         self._ack_flag.clear()
         self.write(cmd_bytes)
         self._logger.info(f'sent command of type {cmd_type}\tcommand frame bytes:\t{cmd_bytes}')
@@ -390,7 +416,8 @@ class TwidSerialInterfaceProtocol(asyncio.Protocol):
     
     #wait for telemetry parameter to equal a certain value
     #this is a awaitable function
-    async def wait_for_param(self, name:str, value, timeout=0.5):
+    async def wait_for_param(self, name:str, value, twid_id:TwidID=TwidID.TWID1_ID, timeout=0.5):
+        self._wait_for_twid_id = twid_id
         self._wait_for_name = name
         self._wait_for_value = value
         self._wait_for_param_flag.clear()
@@ -408,20 +435,28 @@ class TwidSerialInterfaceProtocol(asyncio.Protocol):
     #this is a awaitable function
     #set collect_old_buffer to true if you want to get all the frames currently in buffer
     # otherwise buffer is cleared
-    async def collect_telem(self, duration=1, collect_old_buffer=False) -> pandas.DataFrame:
+    async def collect_telem(self, twid_id:TwidID=None, duration=1, collect_old_buffer=False):
         out :list[TelemetryFrame] = []
-        with self.frames.mutex:
-            if collect_old_buffer:
-                out = list(self.frames.queue)
-                self._logger.debug(f'copied over {len(out)} items from frame queue to output list of collect_telem')
-            self.frames.queue.clear()
-            self._logger.warn(f'cleared frame queue')
+
+        qs = []
+        if twid_id == None:
+            qs = self._frame_queues.values()
+        elif type(twid_id) is TwidID:
+            qs = [self._frame_queues[twid_id]]
+
+        for q in qs:
+            with q.mutex:
+                if collect_old_buffer:
+                    out = list(q.queue)
+                    self._logger.debug(f'copied over {len(out)} items from frame queue {q} to output list of collect_telem')
+                q.queue.clear()
+                self._logger.warn(f'cleared frame queue {q}')
         start = time.time()
-        start_size = self.frames.qsize()
         
         while time.time() < start + duration:
-            if self.frames.qsize() > start_size:
-                out.append(self.frames.get())
+            for q in qs:
+                if not q.empty():
+                    out.append(q.get())
             await asyncio.sleep(1e-3)
         
         self._logger.debug(f'collected {len(out)} telemetry frames during {duration}s interval')
@@ -437,11 +472,18 @@ class TwidSerialInterfaceProtocol(asyncio.Protocol):
     
         return out_dataframe
     
-    def clear_frames(self):
-        cnt = self.frames.qsize()
-        with self.frames.mutex:
-            self.frames.queue.clear()
-        self._logger.warn(f'cleared {cnt} items from frame queue')
+    def clear_frames(self, twid_id=None):
+        qs = []
+        if twid_id is None:
+            qs = self._frame_queues.values()
+        elif type(twid_id) is TwidID:
+            qs = [self._frame_queues[twid_id]]
+
+        for q in qs:
+            cnt = q.qsize()
+            with q.mutex:
+                q.queue.clear()
+            self._logger.warn(f'cleared {cnt} items from frame queue {q}')
 
     async def end(self):
         await self.motor_stop()
@@ -451,11 +493,11 @@ class TwidSerialInterfaceProtocol(asyncio.Protocol):
         self._logger.info(f'end called')
         self.__del__()
 
-    async def control_stop(self):
-        return await self.send_cmd(bytes(f'stop\n',"utf-8"), CommandType.STOP)
+    async def control_stop(self, twid_id:TwidID=TwidID.TWID1_ID):
+        return await self.send_cmd(bytes(f'stop\n',"utf-8"), CommandType.STOP, twid_id)
     
-    async def control_reset(self):
-        return await self.send_cmd(bytes(f'reset\n',"utf-8"), CommandType.RESET)
+    async def control_reset(self, twid_id:TwidID=TwidID.TWID1_ID):
+        return await self.send_cmd(bytes(f'reset\n',"utf-8"), CommandType.RESET, twid_id)
 
     async def esp32_reboot(self):
         return await self.send_cmd(bytes(f'reboot\n',"utf-8"), CommandType.REBOOT)
@@ -463,35 +505,35 @@ class TwidSerialInterfaceProtocol(asyncio.Protocol):
     async def motor_stop(self):
         return await self.send_cmd(bytes(f'set_dutycycle,0,\n',"utf-8"), CommandType.SET_DUTYCYCLE)
         
-    async def update_control_type(self, type:ControlType):
-        return await self.send_cmd(bytes(f'set_mode,{type.value[1]},\n',"utf-8"), CommandType.SET_MODE)
+    async def update_control_type(self, twid_id:TwidID, type:ControlType):
+        return await self.send_cmd(bytes(f'set_mode,{type.value[1]},\n',"utf-8"), CommandType.SET_MODE, twid_id)
     
-    async def update_setpoint(self, position:float=0, velocity:float=0, accel:float=0, torque:float=0):
-        return await self.send_cmd(bytes(f'set_setpoint,{position},{velocity},{accel},{torque},\n',"utf-8"), CommandType.SET_SETPOINT)
+    async def update_setpoint(self,twid_id:TwidID, position:float=0, velocity:float=0, accel:float=0, torque:float=0):
+        return await self.send_cmd(bytes(f'set_setpoint,{position},{velocity},{accel},{torque},\n',"utf-8"), CommandType.SET_SETPOINT, twid_id)
 
-    async def update_pos_setpoint_mulitple(self, sp:list[float]):
-        return await self.send_cmd(bytes(f'set_multisetpoint,position,{len(sp)},{','.join(map(str, sp))},\n',"utf-8"), CommandType.SET_MULTISETPOINT_POSITION, timeout=100)
+    # async def update_pos_setpoint_mulitple(self, sp:list[float]):
+    #     return await self.send_cmd(bytes(f'set_multisetpoint,position,{len(sp)},{','.join(map(str, sp))},\n',"utf-8"), CommandType.SET_MULTISETPOINT_POSITION, timeout=100)
 
-    async def update_vel_setpoint_mulitple(self, sp:list[float]):
-        return await self.send_cmd(bytes(f'set_multisetpoint,velocity,{len(sp)},{','.join(map(str, sp))},\n',"utf-8"), CommandType.SET_MULTISETPOINT_VELOCITY)
+    # async def update_vel_setpoint_mulitple(self, sp:list[float]):
+    #     return await self.send_cmd(bytes(f'set_multisetpoint,velocity,{len(sp)},{','.join(map(str, sp))},\n',"utf-8"), CommandType.SET_MULTISETPOINT_VELOCITY)
 
-    async def update_accel_setpoint_mulitple(self, sp:list[float]):
-        return await self.send_cmd(bytes(f'set_multisetpoint,acceleration,{len(sp)},{','.join(map(str, sp))},\n',"utf-8"), CommandType.SET_MULTISETPOINT_ACCELERATION)
+    # async def update_accel_setpoint_mulitple(self, sp:list[float]):
+    #     return await self.send_cmd(bytes(f'set_multisetpoint,acceleration,{len(sp)},{','.join(map(str, sp))},\n',"utf-8"), CommandType.SET_MULTISETPOINT_ACCELERATION)
 
-    async def update_torque_setpoint_mulitple(self, sp:list[float]):
-        return await self.send_cmd(bytes(f'set_multisetpoint,torque,{len(sp)},{','.join(map(str, sp))},\n',"utf-8"), CommandType.SET_MULTISETPOINT_TORQUE)
+    # async def update_torque_setpoint_mulitple(self, sp:list[float]):
+    #     return await self.send_cmd(bytes(f'set_multisetpoint,torque,{len(sp)},{','.join(map(str, sp))},\n',"utf-8"), CommandType.SET_MULTISETPOINT_TORQUE)
 
-    async def update_impedance(self, K :float=0, B :float=0, J :float= 0):
-        return await self.send_cmd(bytes(f'set_impedance,{K},{B},{J},\n',"utf-8"), CommandType.SET_IMPEDANCE)
+    async def update_impedance(self,twid_id:TwidID, K :float=0, B :float=0, J :float= 0):
+        return await self.send_cmd(bytes(f'set_impedance,{K},{B},{J},\n',"utf-8"), CommandType.SET_IMPEDANCE, twid_id)
 
-    async def update_pid(self, Kp :float=0, Ki :float=0, Kd :float= 0):
-        return await self.send_cmd(bytes(f'set_pid,{Kp},{Ki},{Kd},\n',"utf-8"), CommandType.SET_PID)
+    async def update_pid(self,twid_id:TwidID, Kp :float=0, Ki :float=0, Kd :float= 0):
+        return await self.send_cmd(bytes(f'set_pid,{Kp},{Ki},{Kd},\n',"utf-8"), CommandType.SET_PID,twid_id)
 
-    async def update_dutycycle(self, duty_cycle:float = 0):
-        return await self.send_cmd(bytes(f'set_dutycycle,{duty_cycle},\n',"utf-8"), CommandType.SET_DUTYCYCLE)
+    async def update_dutycycle(self,twid_id, duty_cycle:float = 0):
+        return await self.send_cmd(bytes(f'set_dutycycle,{duty_cycle},\n',"utf-8"), CommandType.SET_DUTYCYCLE,twid_id)
     
-    async def update_telem_sample_rate(self, rate:int=20):
-        return await self.send_cmd(bytes(f'set_telemsamplerate,{rate},\n',"utf-8"), CommandType.SET_TELEMSAMPLERATE)
+    async def update_telem_sample_rate(self,twid_id:TwidID, rate:int=20):
+        return await self.send_cmd(bytes(f'set_telemsamplerate,{rate},\n',"utf-8"), CommandType.SET_TELEMSAMPLERATE,twid_id)
 
 async def run_socket_server_async(twid:TwidSerialInterfaceProtocol, delay=0):
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)

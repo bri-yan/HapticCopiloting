@@ -117,6 +117,8 @@ typedef struct {
     //other
     bool pid_success_flag;
     uint32_t nframes_sent_queue;
+
+    const char* ctrl_id;
 } telemetry_t;
 
 /**
