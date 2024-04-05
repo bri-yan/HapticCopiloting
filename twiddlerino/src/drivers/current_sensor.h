@@ -15,10 +15,20 @@
 //for int types
 #include <stdint.h>
 
+#include "Adafruit_ADS1X15.h"
 
 /******************************************************************************/
-/*                               D E F I N E S                                */
+/*                              T Y P E D E F S                               */
 /******************************************************************************/
+
+/**
+ * @brief Motor States
+ * 
+ */
+typedef enum {
+    CURRENT_SENSOR_1 = 0,
+    CURRENT_SENSOR_2 = 1
+} curr_sens_adc_channel_t;
 
 /******************************************************************************/
 /*                             F U N C T I O N S                              */
@@ -30,14 +40,10 @@
  */
 void current_sensor_init();
 
-double current_sensor_get_volts();
+double current_sensor_get_volts(curr_sens_adc_channel_t);
 
-double current_sensor_get_current();
+double current_sensor_get_current(curr_sens_adc_channel_t);
 
-/**
- * @brief Returns samples per second rate of sensor ADC
- *
- */
 uint16_t current_sensor_sps();
 
 

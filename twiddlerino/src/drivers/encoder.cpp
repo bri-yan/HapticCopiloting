@@ -37,6 +37,13 @@
 #define PCNT_L_LIM -32766
 
 /******************************************************************************/
+/*                P U B L I C  G L O B A L  V A R I A B L E S                 */
+/******************************************************************************/
+
+encoder_context_t encoder1_handle;
+encoder_context_t encoder2_handle;
+
+/******************************************************************************/
 /*            P R I V A T E  F U N C T I O N  P R O T O T Y P E S             */
 /******************************************************************************/
 
@@ -55,55 +62,38 @@ static bool is_pcnt_isr_service_installed = false;
 static portMUX_TYPE spinlock = portMUX_INITIALIZER_UNLOCKED;
 static _lock_t isr_service_install_lock;
 
-static pcnt_unit_t encoder_pcnt_unit = PCNT_UNIT_0;
-
-//encoder count
-//This is updated by an interrupt and likely not atomic!
-//use lock/mutex when reading/writing to this variable
-static volatile int64_t encoder_accu_cnt = 0;
-static volatile int64_t encoder_last_cnt = 0;
-static volatile uint64_t encoder_last_time = 0;
-static volatile double encoder_cnt_velocity = 0.0;
-static volatile double encoder_cnt_last_velocity = 0.0;
-
 /******************************************************************************/
 /*                       P U B L I C  F U N C T I O N S                       */
 /******************************************************************************/
 
-void encoder_init(pcnt_unit_t unit, gpio_num_t quad_pin_a, gpio_num_t quad_pin_b, uint16_t filter) {
-
+void encoder_init(encoder_context_t* encoder_ctx) {
+    ESP_LOGI(TAG, "Encoder innit for unit %i",encoder_ctx->pcnt_unit);
     //init value
-    encoder_accu_cnt = 0;
-    encoder_last_cnt = 0;
-    encoder_last_time = 0;
-    encoder_cnt_velocity = 0.0;
-    encoder_cnt_last_velocity = 0.0;
-
-    encoder_pcnt_unit = unit;
+    encoder_ctx->encoder_accu_cnt = 0;
 
     //pins
-    pinMode(quad_pin_a, INPUT_PULLUP);
-    pinMode(quad_pin_b, INPUT_PULLUP);
-    ESP_LOGD(TAG, "Quaderature GPIO pins initialized");
+    pinMode(encoder_ctx->quad_pin_a, INPUT_PULLUP);
+    pinMode(encoder_ctx->quad_pin_b, INPUT_PULLUP);
+    ESP_LOGI(TAG, "Quaderature GPIO pins initialized (QuadA: gpio %i, QuadB: gpio %i)",encoder_ctx->quad_pin_a,encoder_ctx->quad_pin_b);
 
     //config channel 0 counter
     pcnt_config_t dev_config = {
-        .pulse_gpio_num = quad_pin_a,
-        .ctrl_gpio_num = quad_pin_b,
+        .pulse_gpio_num = encoder_ctx->quad_pin_a,
+        .ctrl_gpio_num = encoder_ctx->quad_pin_b,
         .lctrl_mode = PCNT_MODE_KEEP,
         .hctrl_mode = PCNT_MODE_REVERSE,
         .pos_mode = PCNT_COUNT_DEC,
         .neg_mode = PCNT_COUNT_INC,
         .counter_h_lim = PCNT_H_LIM,
         .counter_l_lim = PCNT_L_LIM,
-        .unit = encoder_pcnt_unit,
+        .unit = encoder_ctx->pcnt_unit,
         .channel = PCNT_CHANNEL_0
     };
     pcnt_unit_config(&dev_config);
 
     //config channel 1 counter
-    dev_config.pulse_gpio_num = quad_pin_b;
-    dev_config.ctrl_gpio_num = quad_pin_a;
+    dev_config.pulse_gpio_num = encoder_ctx->quad_pin_b;
+    dev_config.ctrl_gpio_num = encoder_ctx->quad_pin_a;
     dev_config.channel = PCNT_CHANNEL_1;
 
     //disable because we are counting 2 (half) quaderature
@@ -111,131 +101,102 @@ void encoder_init(pcnt_unit_t unit, gpio_num_t quad_pin_a, gpio_num_t quad_pin_b
     dev_config.neg_mode = PCNT_COUNT_DIS;
     dev_config.lctrl_mode = PCNT_MODE_DISABLE;
     dev_config.lctrl_mode = PCNT_MODE_DISABLE;
-    pcnt_unit_config(&dev_config);
+    ESP_ERROR_CHECK(pcnt_unit_config(&dev_config));
 
     //pause and reset count value
-    pcnt_counter_pause(encoder_pcnt_unit);
-    pcnt_counter_clear(encoder_pcnt_unit);
+    ESP_ERROR_CHECK(pcnt_counter_pause(encoder_ctx->pcnt_unit));
+    ESP_ERROR_CHECK(pcnt_counter_clear(encoder_ctx->pcnt_unit));
 
     // register interrupt handler and update flag
     // lock for thread safety
     LOCK_ACQUIRE();
     if (!is_pcnt_isr_service_installed) {
-        pcnt_isr_service_install(0);
+        ESP_ERROR_CHECK(pcnt_isr_service_install(0));
         is_pcnt_isr_service_installed = true;
     }
     LOCK_RELEASE();
 
     //attach interrupt handler
-    pcnt_isr_handler_add(encoder_pcnt_unit, encoder_pcnt_overflow_interrupt_handler, NULL);
+    ESP_ERROR_CHECK(pcnt_isr_handler_add(encoder_ctx->pcnt_unit, encoder_pcnt_overflow_interrupt_handler, encoder_ctx));
 
     //configure events for interrupt
     //trigger on limit overflow
-    pcnt_event_enable(encoder_pcnt_unit, PCNT_EVT_H_LIM);
-    pcnt_event_enable(encoder_pcnt_unit, PCNT_EVT_L_LIM);
+    ESP_ERROR_CHECK(pcnt_event_enable(encoder_ctx->pcnt_unit, PCNT_EVT_H_LIM));
+    ESP_ERROR_CHECK(pcnt_event_enable(encoder_ctx->pcnt_unit, PCNT_EVT_L_LIM));
     //trigger on decrement / increment
-    pcnt_set_event_value(encoder_pcnt_unit, PCNT_EVT_THRES_0, -1);
-    pcnt_set_event_value(encoder_pcnt_unit, PCNT_EVT_THRES_1, 1);
-    pcnt_event_enable(encoder_pcnt_unit, PCNT_EVT_THRES_0);
-    pcnt_event_enable(encoder_pcnt_unit, PCNT_EVT_THRES_1);
+    ESP_ERROR_CHECK(pcnt_set_event_value(encoder_ctx->pcnt_unit, PCNT_EVT_THRES_0, -1));
+    ESP_ERROR_CHECK(pcnt_set_event_value(encoder_ctx->pcnt_unit, PCNT_EVT_THRES_1, 1));
+    ESP_ERROR_CHECK(pcnt_event_enable(encoder_ctx->pcnt_unit, PCNT_EVT_THRES_0));
+    ESP_ERROR_CHECK(pcnt_event_enable(encoder_ctx->pcnt_unit, PCNT_EVT_THRES_1));
 
     //set filter value
-    pcnt_set_filter_value(encoder_pcnt_unit, filter);
-    if(filter) {
-        pcnt_filter_enable(encoder_pcnt_unit);
+    ESP_ERROR_CHECK(pcnt_set_filter_value(encoder_ctx->pcnt_unit, encoder_ctx->filter));
+    if(encoder_ctx->filter) {
+        ESP_ERROR_CHECK(pcnt_filter_enable(encoder_ctx->pcnt_unit));
     } else {
-        pcnt_filter_disable(encoder_pcnt_unit);
+        ESP_ERROR_CHECK(pcnt_filter_disable(encoder_ctx->pcnt_unit));
     }
-    ESP_LOGD(TAG, "Pulse counter peripheral units configured");
+    ESP_LOGI(TAG, "Pulse counter peripheral unit %i configured",encoder_ctx->pcnt_unit);
+
     //enable interrupt and resume count
-    pcnt_intr_enable(encoder_pcnt_unit);
-    pcnt_counter_resume(encoder_pcnt_unit);
-    ESP_LOGD(TAG, "Pulse counter peripheral interrupt enabled and resumed");
+    ESP_ERROR_CHECK(pcnt_intr_enable(encoder_ctx->pcnt_unit));
+    ESP_ERROR_CHECK(pcnt_counter_resume(encoder_ctx->pcnt_unit));
+    ESP_LOGI(TAG, "Pulse counter peripheral unit %i interrupt enabled and resumed", encoder_ctx->pcnt_unit);
 }
 
-void encoder_pause()
+void encoder_pause(encoder_context_t* encoder_ctx)
 {
-    pcnt_counter_pause(encoder_pcnt_unit);
+    pcnt_counter_pause(encoder_ctx->pcnt_unit);
 }
 
-void encoder_terminate()
+void encoder_terminate(encoder_context_t* encoder_ctx)
 {
     ESP_LOGD(TAG, "encoder_terminate called");
     //disable all things enabled in setup
-    pcnt_set_filter_value(encoder_pcnt_unit, 0);
-    pcnt_filter_disable(encoder_pcnt_unit);
-    pcnt_counter_pause(encoder_pcnt_unit);
-    pcnt_counter_clear(encoder_pcnt_unit);
-    pcnt_event_disable(encoder_pcnt_unit, PCNT_EVT_H_LIM);
-    pcnt_event_disable(encoder_pcnt_unit, PCNT_EVT_L_LIM);
-    pcnt_isr_handler_remove(encoder_pcnt_unit);
+    pcnt_set_filter_value(encoder_ctx->pcnt_unit, 0);
+    pcnt_filter_disable(encoder_ctx->pcnt_unit);
+    pcnt_counter_pause(encoder_ctx->pcnt_unit);
+    pcnt_counter_clear(encoder_ctx->pcnt_unit);
+    pcnt_event_disable(encoder_ctx->pcnt_unit, PCNT_EVT_H_LIM);
+    pcnt_event_disable(encoder_ctx->pcnt_unit, PCNT_EVT_L_LIM);
+    pcnt_isr_handler_remove(encoder_ctx->pcnt_unit);
     pcnt_isr_service_uninstall();
-    pcnt_intr_disable(encoder_pcnt_unit);
-    encoder_cnt_velocity = 0.0;
-    encoder_cnt_last_velocity = 0.0;
-    encoder_accu_cnt = 0;
-    encoder_last_cnt = 0;
-    encoder_last_time = 0;
+    pcnt_intr_disable(encoder_ctx->pcnt_unit);
+    encoder_ctx->encoder_accu_cnt = 0;
 }
 
-void encoder_clear_count()
+void encoder_clear_count(encoder_context_t* encoder_ctx)
 {
-    pcnt_counter_pause(encoder_pcnt_unit);
-    pcnt_counter_clear(encoder_pcnt_unit);
+    pcnt_counter_pause(encoder_ctx->pcnt_unit);
+    pcnt_counter_clear(encoder_ctx->pcnt_unit);
     _ENTER_CRITICAL();
-    ESP_LOGD(TAG, "encoder clear count called (current count: %lli)",encoder_accu_cnt);
-    encoder_cnt_velocity = 0.0;
-    encoder_cnt_last_velocity = 0.0;
-    encoder_accu_cnt = 0;
-    encoder_last_cnt = 0;
-    encoder_last_time = 0;
+    ESP_LOGD(TAG, "encoder clear count called (current count: %lli)", encoder_ctx->encoder_accu_cnt);
+    encoder_ctx->encoder_accu_cnt = 0;
     _EXIT_CRITICAL();
-    pcnt_counter_resume(encoder_pcnt_unit);
+    pcnt_counter_resume(encoder_ctx->pcnt_unit);
 }
 
-int64_t encoder_get_count()
+int64_t encoder_get_count(encoder_context_t* encoder_ctx)
 {
     int16_t cval;
     int64_t rval;
-    pcnt_get_counter_value(encoder_pcnt_unit, &cval);
+    pcnt_get_counter_value(encoder_ctx->pcnt_unit, &cval);
     _ENTER_CRITICAL();
-    rval = encoder_accu_cnt + cval;
+    rval = encoder_ctx->encoder_accu_cnt + cval;
     _EXIT_CRITICAL();
 
     return rval;
 }
 
-double encoder_get_angle()
+double encoder_get_angle(encoder_context_t* encoder_ctx)
 {
-    return ((encoder_get_count() / (ENCODER_CPR*2.0)) * 360);
+    return ((encoder_get_count(encoder_ctx) / (ENCODER_CPR*2.0)) * 360);
 }
 
-double encoder_get_velocity()
+double encoder_get_angle_rad(encoder_context_t* encoder_ctx)
 {
-    _ENTER_CRITICAL();
-    if (micros() - encoder_last_time > ENCODER_VELOCITY_READ_TIMEOUT_US)  {
-        //if no new encoder ticks after timeout, set velocity to 0
-        encoder_cnt_velocity = 0.0;
-    } else if (encoder_accu_cnt == encoder_last_cnt 
-    && encoder_cnt_velocity == encoder_cnt_last_velocity) {
-        encoder_cnt_last_velocity = encoder_cnt_velocity;
-        encoder_cnt_velocity = 0.0;
-    }
-    _EXIT_CRITICAL();
-    return (encoder_cnt_velocity / (ENCODER_CPR*2.0)) * 360;
+    return encoder_get_angle(encoder_ctx) * DEGREES_TO_RADIANS;
 }
-
-
-double encoder_get_angle_rad()
-{
-    return encoder_get_angle() * DEGREES_TO_RADIANS;
-}
-
-double encoder_get_velocity_rad()
-{
-    return encoder_get_velocity() * DEGREES_TO_RADIANS;
-}
-
 
 /******************************************************************************/
 /*                      P R I V A T E  F U N C T I O N S                      */
@@ -244,31 +205,25 @@ double encoder_get_velocity_rad()
 static void encoder_pcnt_overflow_interrupt_handler(void *arg)
 {
     uint32_t status = 0;
+    encoder_context_t *encoder_ctx = (encoder_context_t *)arg;
 
     _ENTER_CRITICAL();
 
-    pcnt_get_event_status(encoder_pcnt_unit, &status);
+    ESP_ERROR_CHECK(pcnt_get_event_status(encoder_ctx->pcnt_unit, &status));
 
     //check each event and increment count accordingly
     if (status & PCNT_EVT_H_LIM) {
-        encoder_accu_cnt += PCNT_H_LIM;
-        pcnt_counter_clear(encoder_pcnt_unit);
+        encoder_ctx->encoder_accu_cnt += PCNT_H_LIM;
+        ESP_ERROR_CHECK(pcnt_counter_clear(encoder_ctx->pcnt_unit));
     } else if (status & PCNT_EVT_L_LIM) {
-        encoder_accu_cnt += PCNT_L_LIM;
-        pcnt_counter_clear(encoder_pcnt_unit);
+        encoder_ctx->encoder_accu_cnt += PCNT_L_LIM;
+        ESP_ERROR_CHECK(pcnt_counter_clear(encoder_ctx->pcnt_unit));
     } else if (status & PCNT_EVT_THRES_0 || status & PCNT_EVT_THRES_1) {
         int16_t cval;
-		pcnt_get_counter_value(encoder_pcnt_unit, &cval);
-		encoder_accu_cnt += cval;
-		pcnt_counter_clear(encoder_pcnt_unit);
+		ESP_ERROR_CHECK(pcnt_get_counter_value(encoder_ctx->pcnt_unit, &cval));
+		encoder_ctx->encoder_accu_cnt += cval;
+		ESP_ERROR_CHECK(pcnt_counter_clear(encoder_ctx->pcnt_unit));
     }
-
-    int64_t dcount = encoder_accu_cnt - encoder_last_cnt;
-    encoder_last_cnt = encoder_accu_cnt;
-    uint64_t dt = micros() - encoder_last_time;
-    encoder_last_time = micros();
-    encoder_cnt_last_velocity = encoder_cnt_velocity;
-    encoder_cnt_velocity = ( ( dcount * 1.0e6 ) / dt );
 
     _EXIT_CRITICAL();
 }

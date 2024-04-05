@@ -82,11 +82,47 @@ void twiddlerino_setup() {
 
   //hardware setup
   ESP_LOGI(TAG, "Hardware setup started");
+
+  //setup hardware handles
+  motor1_handle = {
+    .power_pin = PIN_MOTOR1_POWER,
+    .dir_pin = PIN_MOTOR1_DIR,
+    .pwm_channel = MOTOR1_PWM_CHAN_DEFAULT,
+    .state = motor_state_t::MOTOR_NOT_INITIALIZED,
+    .handle_name = "motor1"
+    };
+
+  motor2_handle = {
+    .power_pin = PIN_MOTOR2_POWER,
+    .dir_pin = PIN_MOTOR2_DIR,
+    .pwm_channel = MOTOR2_PWM_CHAN_DEFAULT,
+    .state = motor_state_t::MOTOR_NOT_INITIALIZED,
+    .handle_name = "motor2"
+    };
+
+  encoder1_handle = {
+    .quad_pin_a = PIN_ENCODER1_QUAD_A,
+    .quad_pin_b = PIN_ENCODER1_QUAD_B,
+    .pcnt_unit = pcnt_unit_t::PCNT_UNIT_0,
+    .filter = ENCODER_DEFAULT_FILTER};
+
+  encoder2_handle = {
+    .quad_pin_a = PIN_ENCODER2_QUAD_A,
+    .quad_pin_b = PIN_ENCODER2_QUAD_B,
+    .pcnt_unit = pcnt_unit_t::PCNT_UNIT_1,
+    .filter = ENCODER_DEFAULT_FILTER};
+
+  //error checks handled inside init functions
   current_sensor_init();
-  encoder_init(pcnt_unit_t::PCNT_UNIT_0, PIN_ENCODER_QUAD_A, PIN_ENCODER_QUAD_B, ENCODER_DEFAULT_FILTER);
-  motor_init(PIN_MOTOR_POWER, PIN_MOTOR_DIR_0, PIN_MOTOR_DIR_1);
-  encoder_clear_count();
-  motor_set_state(motor_state_t::MOTOR_LOW);
+
+  encoder_init(&encoder1_handle);
+  encoder_init(&encoder2_handle);
+
+  motor_init(&motor1_handle);
+  motor_init(&motor2_handle);
+
+  motor_set_state(&motor1_handle, motor_state_t::MOTOR_LOW);
+  motor_set_state(&motor2_handle, motor_state_t::MOTOR_LOW);
 
   //start communication tasks on core 0
   xTaskCreatePinnedToCore(
@@ -158,8 +194,8 @@ void TaskRunTControl(void *pvParameters){
   ESP_LOGI(TAG, "T Control Task Initialized.\n");
 
   //initial hardware state
-  encoder_clear_count();
-  motor_set_state(motor_state_t::MOTOR_LOW);
+  encoder_clear_count(&encoder1_handle);
+  motor_set_state(&motor1_handle, motor_state_t::MOTOR_LOW);
   tcontrol_cfg(&control_config);
   tcontrol_start();
   ESP_LOGI(TAG, "Controller runnning: %i\n",tcontrol_is_running());
@@ -193,11 +229,11 @@ void TaskReadTCommands(void *pvParameters) {
       ESP_LOGD(TAG, "Received data: %s\n", read_string);
 
      if(read_string == "STOP" || read_string == "stop"){
-        motor_fast_stop();
+        motor_fast_stop(&motor1_handle);
         tcontrol_stop();
         last_cmd = cmd_type_t::STOP;
       } else if(read_string == "RESET" || read_string == "reset"){
-        motor_fast_stop();
+        motor_fast_stop(&motor1_handle);
         reset_sent_count();
         tcontrol_reset();
         last_cmd = cmd_type_t::RESET;
@@ -231,9 +267,10 @@ void TaskReadTCommands(void *pvParameters) {
           i0+=1;
           int16_t i = read_string.indexOf(',',i0);
           int32_t dc = read_string.substring(i0,i).toInt();
-          motor_set_pwm(dc);
+
+          motor_set_pwm(&motor1_handle, dc);
           ESP_LOGD(TAG, "Set pwm duty cycle to %li with frequency %lu.\nMotor State: %i.\n",
-          motor_get_duty_cycle(), motor_get_frequency(), motor_get_state());
+          motor_get_duty_cycle(&motor1_handle), motor_get_frequency(&motor1_handle), motor_get_state(&motor1_handle));
           last_cmd = cmd_type_t::SET_DUTYCYCLE;
       } else {
         controller_context_t cfg;

@@ -188,11 +188,11 @@ static void pid_callback(void *args)
     last_time += telem.loop_dt;
 
     telem.read_dt = micros();
-    telem.position = encoder_get_angle();
+    telem.position = encoder_get_angle(&encoder1_handle);
 
     //read and filter current
-    telem.current_sens_adc_volts = current_sensor_get_volts();
-    telem.current = current_sensor_get_current();
+    telem.current_sens_adc_volts = current_sensor_get_volts(curr_sens_adc_channel_t::CURRENT_SENSOR_1);
+    telem.current = current_sensor_get_current(curr_sens_adc_channel_t::CURRENT_SENSOR_1);
     telem.filtered_current = current_filt_ewa(telem.current);
 
     //read and filter velocity
@@ -200,14 +200,14 @@ static void pid_callback(void *args)
     telem.velocity = ((telem.position - last_pos)/(controller_config.sample_time_us*1e-6)) * DEGS_TO_RPM;
     last_pos = telem.position;
 
-    motor_safety_check(telem.filtered_velocity);
+    motor_safety_check(&motor1_handle, telem.filtered_velocity);
 
     telem.filtered_velocity = velocity_filt_ewa(telem.velocity);
 
     //calculate torque
     telem.torque_net = controller_config.motor_Ke * telem.filtered_current;
-    telem.torque_control = controller_config.motor_Ke * lookup_exp_current((double)motor_get_duty_cycle()); //controller_config.motor_Kv * telem.filtered_velocity;
-    if (motor_get_state() == motor_state_t::MOTOR_DRIVE_CCW) {
+    telem.torque_control = controller_config.motor_Ke * lookup_exp_current((double)motor_get_duty_cycle(&motor1_handle)); //controller_config.motor_Kv * telem.filtered_velocity;
+    if (motor_get_state(&motor1_handle) == motor_state_t::MOTOR_DRIVE_CCW) {
         telem.torque_control *= -1;
     }
     telem.torque_external = telem.torque_net - telem.torque_control;
@@ -300,11 +300,11 @@ static void pid_callback(void *args)
 
     //apply control signal
     if(controller_config.control_type != control_type_t::NO_CTRL) {
-        motor_set_pwm(output_signal);
+        motor_set_pwm(&motor1_handle, output_signal);
     }
-    telem.pwm_duty_cycle = (double)motor_get_duty_cycle();
+    telem.pwm_duty_cycle = (double)motor_get_duty_cycle(&motor1_handle);
 
-    telem.pwm_frequency = motor_get_frequency();
+    telem.pwm_frequency = motor_get_frequency(&motor1_handle);
     telem.control_dt = micros() - telem.control_dt;
 
     //fill and return telemetry structure

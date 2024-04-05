@@ -31,62 +31,72 @@
 #define RADIANS_TO_DEGREES 57.2957795131
 
 /******************************************************************************/
+/*                              T Y P E D E F S                               */
+/******************************************************************************/
+
+typedef struct {
+    gpio_num_t quad_pin_a;
+    gpio_num_t quad_pin_b;
+    pcnt_unit_t pcnt_unit;
+    uint16_t filter;
+
+    //to be updated in ISRs
+    //don't access this without proper thread safety
+    volatile int64_t encoder_accu_cnt;
+} encoder_context_t;
+
+/******************************************************************************/
+/*                P U B L I C  G L O B A L  V A R I A B L E S                 */
+/******************************************************************************/
+
+//encoder handles
+extern encoder_context_t encoder1_handle;
+extern encoder_context_t encoder2_handle;
+
+/******************************************************************************/
 /*                             F U N C T I O N S                              */
 /******************************************************************************/
 
 /**
  * @brief Init encoder
  * 
- * Inits pins and counter value as input pullup and setup up PCNT timer and interrupts for quaderatrue decoding
- * 
- * @param unit - counter peripheral unit number (PCNT_UNIT_0 up to PCNT_UNIT_7)
- * @param quad_pin_a, quad_pin_b - quaderature signals a and b physical gpio pins
- * @param filter - filter value to account for glitches/noise in quaderature signals, can be 0 for no filter
+ * Inits pins and counter value as input pullup and setup up PCNT timer and interrupts for quaderatrue decodingr
  *
  */
-void encoder_init(pcnt_unit_t unit, gpio_num_t quad_pin_a, gpio_num_t quad_pin_b, uint16_t filter);
+void encoder_init(encoder_context_t*);
 
 /**
  * @brief Pause the encoder counting
  *
  */
-void encoder_pause();
+void encoder_pause(encoder_context_t*);
 
 /**
  * @brief Terminate encoder
  *
  */
-void encoder_terminate();
+void encoder_terminate(encoder_context_t*);
 
 /**
  * @brief Get encoder counter value
  *
  */
-int64_t encoder_get_count();
+int64_t encoder_get_count(encoder_context_t*);
 
 /**
  * @brief Reset encoder count to 0
  */
-void encoder_clear_count();
+void encoder_clear_count(encoder_context_t*);
 
 /**
  * @brief Returns encoder angle in degrees
  */
-double encoder_get_angle();
-
-/**
- * @brief Returns encoder last measured velocity in degrees/second
- */
-double encoder_get_velocity();
+double encoder_get_angle(encoder_context_t*);
 
 /**
  * @brief Returns encoder angle in radians
  */
-double encoder_get_angle_rad();
+double encoder_get_angle_rad(encoder_context_t*);
 
-/**
- * @brief Returns encoder last measured velocity in radians/second
- */
-double encoder_get_velocity_rad();
 
 #endif // ENCODER_H_

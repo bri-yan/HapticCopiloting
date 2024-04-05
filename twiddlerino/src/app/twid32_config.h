@@ -14,6 +14,8 @@
 //need to import controller config struct definition
 #include "app/control/control_types.h"
 
+#include "twid32_pin_defs.h"
+
 #include <FreeRTOSConfig.h>
 
 /******************************************************************************/
@@ -26,11 +28,9 @@
 #define COMMAND_QUEUE_SIZE 10U
 #define TELEMETRY_DEFAULT_SAMPLE_RATE 20U //telemetry sample rate in (control loops)/sample
 
-
 //hardware config
 //encoder
 #define ENCODER_DEFAULT_FILTER 200
-#define ENCODER_VELOCITY_READ_TIMEOUT_US 100000
 #define ENCODER_CPR 500
 
 //serial port
@@ -41,6 +41,8 @@
 #define MOTOR_PWM_FREQ 20000U
 #define MOTOR_DUTY_CYCLE_RES_BITS 10U
 #define MOTOR_DUTY_CYCLE_RES 1024
+#define MOTOR1_PWM_CHAN_DEFAULT 0
+#define MOTOR2_PWM_CHAN_DEFAULT 2
 
 //current sensor
 #define CURRENT_SENS_VOLTS_PER_AMP 0.136 //mV/Amp sensitivity on the hall effect sensor
