@@ -1,4 +1,4 @@
-# serial_interface.py v2.3
+# serial_interface.py v2.5
 #   A python serial based protocol with an esp32 for a haptic virtual environment
 #   Also shares telemetry data over tcp socket - this can be accessed by other GUI software such as serial studio
 #
@@ -38,9 +38,9 @@ TELEMETRY_FRAME_LENGTH = 29
 
 _LOG_NAME = 'TWIDDLERINO_SERIAL'
 _LOG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..','data','logs')
-_LOG_FILE = os.path.join(_LOG_DIR, f'{_LOG_NAME}_{time.strftime('%Y-%m-%d_%H-%M-%S')}.log')
-_TELEM_LOG_FILE = os.path.join(_LOG_DIR, f'telemetry_frame_{time.strftime('%Y-%m-%d_%H-%M-%S')}.log')
-_SERIALDEBUG_LOG_FILE = os.path.join(_LOG_DIR, f'serial_debug_dump_{time.strftime('%Y-%m-%d_%H-%M-%S')}.log')
+_LOG_FILE = os.path.join(_LOG_DIR, f'{_LOG_NAME}_{time.strftime('%Y-%m-%d_%H-%M')}.log')
+_TELEM_LOG_FILE = os.path.join(_LOG_DIR, f'telemetry_frame_{time.strftime('%Y-%m-%d_%H-%M')}.log')
+_SERIALDEBUG_LOG_FILE = os.path.join(_LOG_DIR, f'serial_debug_dump_{time.strftime('%Y-%m-%d_%H-%M')}.log')
 
 #python copy of control_type_t in esp32 firmware
 class ControlType(Enum):
@@ -149,7 +149,7 @@ class TwidSerialInterfaceProtocol(asyncio.Protocol):
     transport:serial_asyncio.SerialTransport
     datafields:list[str] = [field.name for field in dataclasses.fields(TelemetryFrame)]
     control_value_fields:list[tuple[int,str]] = [e.value for e in ControlType]
-    socket_write_buffer:queue.Queue = queue.Queue(100)
+    socket_write_buffer:queue.Queue = queue.Queue(1000)
     _instance = None
     
     #re
@@ -220,7 +220,10 @@ class TwidSerialInterfaceProtocol(asyncio.Protocol):
             try:
                 self.socket_write_buffer.get_nowait()
             except Exception as errmsg:
-                print(errmsg)
+                self._logger.error(errmsg)
+                with self.socket_write_buffer.mutex:
+                    self.socket_write_buffer.queue.clear()
+                    self._logger.warn(f'emptied queue {self.socket_write_buffer}')
         self.socket_write_buffer.put(data)
 
         #add buffer (it could be empty)
@@ -254,6 +257,7 @@ class TwidSerialInterfaceProtocol(asyncio.Protocol):
                         #try to decode frame 
                         frame = self.bytes2frame(stripped_telem_bytes)
                     except Exception as errmsg:
+                        self._logger.error(errmsg)
                         self.err_frame_count+=1
                     
                     #if we decoded a frame
@@ -322,7 +326,7 @@ class TwidSerialInterfaceProtocol(asyncio.Protocol):
     #blocking function that returns true when command to twid is acknowledged with correct code
     #this is a awaitable function
     #if blocking is set to false, send command will not wait for acknowledgement
-    async def send_cmd(self, cmd_bytes:bytes, cmd_type:CommandType, blocking=True, timeout=0.25, reboot_timeout=5) -> bool:
+    async def send_cmd(self, cmd_bytes:bytes, cmd_type:CommandType, blocking=True, timeout=0.25, reboot_timeout=10) -> bool:
         self._last_ack_payload = CommandType.NA_CMD
         self._ack_flag.clear()
         self.write(cmd_bytes)
@@ -332,7 +336,7 @@ class TwidSerialInterfaceProtocol(asyncio.Protocol):
             try:
                 await asyncio.wait_for(self._ack_flag.wait(), timeout=timeout)
             except Exception as errmsg:
-                print(errmsg)
+                self._logger.error(errmsg)
                 self._logger.warn(f'wait for command timed out for command of type {cmd_type}')
                 return False
             
@@ -344,11 +348,13 @@ class TwidSerialInterfaceProtocol(asyncio.Protocol):
 
                 try:
                     await asyncio.wait_for(self._telem_after_reboot.wait(), timeout=reboot_timeout)
+                except Exception as errmsg:
+                    self._logger.error(f'{errmsg}')
                     self._telem_after_reboot.clear()
                     self._reboot_flag.clear()
-                except Exception as errmsg:
-                    print(errmsg)
                     return False
+                self._telem_after_reboot.clear()
+                self._reboot_flag.clear()
 
             if self._last_ack_payload == cmd_type:
                 return True
