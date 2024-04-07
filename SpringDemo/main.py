@@ -2,6 +2,9 @@ import random
 import sys
 import time
 from collections import deque
+import pygame_widgets
+from pygame_widgets.slider import Slider
+from pygame_widgets.textbox import TextBox
 
 import numpy as np
 import pygame
@@ -80,6 +83,9 @@ async def run_game():
     damper = pygame.Rect(msd.x + msd_width, msd.y + 4*msd_height//5 - damper_thickness//2, spring_width, damper_thickness)
     damper_block = pygame.Rect(damper.x + spring_width//2 - damper_width//2, damper.y + damper_thickness//2 - damper_width//2, damper_width, damper_height)
 
+    slider = Slider(screen, 100, 100, 800, 40, min=0, max=99, step=1, handleColour=WHITE)
+    output = TextBox(screen, 475, 200, 50, 50, fontSize=30)
+
     game_interface.configure_controller_default()
     
 
@@ -87,7 +93,8 @@ async def run_game():
     
     while True:
         # Handle game events
-        for event in pygame.event.get():
+        events = pygame.event.get()
+        for event in events:
             # Handle game quit
             if event.type == pygame.QUIT or \
             (event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE):
@@ -107,6 +114,9 @@ async def run_game():
         pygame.draw.rect(screen, WHITE, msd)
         pygame.draw.rect(screen, WHITE, damper)
         pygame.draw.rect(screen, WHITE, damper_block)
+
+        output.setText(slider.getValue())
+        pygame_widgets.update(events)
 
         
 
