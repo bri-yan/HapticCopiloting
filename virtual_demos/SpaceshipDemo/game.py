@@ -48,6 +48,10 @@ class SpaceshipDemo:
         self.error_history = deque(maxlen=100)
         self.asteroids = deque(maxlen=MAX_ASTEROIDS)
         self.projectiles = deque(maxlen=MAX_PROJECTILES)
+        self.left_offset = -40
+        self.right_offset = -40
+        self.left_start = None
+        self.right_start = None
     
     def reset_game(self):
         self.score = 0
@@ -102,6 +106,7 @@ class SpaceshipDemo:
         font = pygame.font.Font(None, 36)  # Change the size as needed
 
         # Create game objects
+        self.left_start, self.right_start = WIDTH//4, 3*WIDTH//4
         left_ship = PlayerShip(WIDTH//4 - SHIP_WIDTH//2, HEIGHT - 50 - SHIP_HEIGHT//2, SHIP_WIDTH, SHIP_HEIGHT, left_bound=0, right_bound=WIDTH//2)
         right_ship = PlayerShip(3*WIDTH//4 - SHIP_WIDTH//2, HEIGHT - 50 - SHIP_HEIGHT//2, SHIP_WIDTH, SHIP_HEIGHT, left_bound=WIDTH//2, right_bound=WIDTH)
         ships = [left_ship, right_ship]
@@ -240,16 +245,25 @@ class SpaceshipDemo:
                 for path in paths:
                     path.draw(screen)
 
+            # Offset adjustment
+            if keys[pygame.K_a]:
+                self.left_offset -= 1
+            if keys[pygame.K_d]:
+                self.left_offset += 1
+            if keys[pygame.K_j]:
+                self.right_offset -= 1
+            if keys[pygame.K_l]:
+                self.right_offset += 1
+
             # Update the display
             pygame.display.flip()
 
             #get the latest telemetry frame
             if not self.game_interface.frames_t1.empty():
-                offset = -40
-                target_position = paths[1].get_target(12, screen)
+                target_position = paths[1].get_target(12, screen) - self.right_start
                 await self.game_interface.game_update_setpoint(TwidID.TWID1_ID, position=target_position)
                 latest_frame: TelemetryFrame = self.game_interface.latest_frame_t1
-                right_ship.x = latest_frame.position + offset
+                right_ship.x = latest_frame.position + self.right_offset + self.right_start
                 error = target_position - latest_frame.position
                 # await self.error_based_stiffness(TwidID.TWID1_ID, error, 3e-2, 1e-6)
                 await self.average_error_based_stiffness(TwidID.TWID1_ID, error, 1e-1)
@@ -258,11 +272,10 @@ class SpaceshipDemo:
                 # print(f'frame #: {self.game_interface.frame_count}, frame: {latest_frame}')
 
             if not self.game_interface.frames_t2.empty():
-                offset = -40
-                target_position = paths[0].get_target(12, screen)
+                target_position = paths[0].get_target(12, screen) - self.left_start
                 await self.game_interface.game_update_setpoint(TwidID.TWID2_ID, position=target_position)
                 latest_frame: TelemetryFrame = self.game_interface.latest_frame_t2
-                left_ship.x = latest_frame.position + offset
+                left_ship.x = latest_frame.position + self.left_offset + self.left_start
                 # await self.error_based_stiffness(TwidID.TWID2_ID, error, 1e-2, 1e-6)
                 error = target_position - latest_frame.position
                 # await self.average_error_based_stiffness(TwidID.TWID2_ID, error, 1e-1)
