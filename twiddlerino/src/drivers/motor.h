@@ -2,7 +2,6 @@
  * @file motor.h
  * @brief Motor driver
  * @author Yousif El-Wishahy (ywishahy@student.ubc.ca)
- * Based on code from Oliver Schneider (oschneid@cs.ubc.ca) and Bereket Guta (bguta@cs.ubc.ca)
  * 
  */
 
@@ -37,6 +36,22 @@ typedef enum {
     MOTOR_NOT_INITIALIZED = -1,
 } motor_state_t;
 
+typedef struct {
+    gpio_num_t power_pin;
+    gpio_num_t dir_pin;
+    uint8_t pwm_channel;
+    motor_state_t state;
+    const char* handle_name;
+} motor_driver_context_t;
+
+/******************************************************************************/
+/*                P U B L I C  G L O B A L  V A R I A B L E S                 */
+/******************************************************************************/
+
+//motor contexts
+extern motor_driver_context_t motor1_handle;
+extern motor_driver_context_t motor2_handle;
+
 /******************************************************************************/
 /*                             F U N C T I O N S                              */
 /******************************************************************************/
@@ -45,42 +60,42 @@ typedef enum {
  * @brief Init motor on power and directions pins
  *
  */
-void motor_init(const gpio_num_t motor_power_pin, const gpio_num_t motor_dir0_pin, const gpio_num_t motor_dir1_pin);
+void motor_init(motor_driver_context_t*);
 
 /**
  * @brief Sets motor state to low
  *
  */
-void motor_stop();
+void motor_stop(motor_driver_context_t*);
 
-motor_state_t motor_set_state(motor_state_t);
+motor_state_t motor_set_state(motor_driver_context_t*, motor_state_t);
 
-motor_state_t motor_get_state();
+motor_state_t motor_get_state(motor_driver_context_t*);
 
 /**
  * @brief PWM frequency
  *
  */
-uint32_t motor_get_frequency();
+uint32_t motor_get_frequency(motor_driver_context_t*);
 
 /**
  * @brief PWM duty cycle
  *
  */
-uint32_t motor_get_duty_cycle();
+uint32_t motor_get_duty_cycle(motor_driver_context_t*);
 
 /**
  * @brief Sets motor pwm duty cycle
  *  Drive direction is also set based on sign of duty cycle (drive left for dc < 0)
  */
-int32_t motor_set_pwm(int32_t dc);
+int32_t motor_set_pwm(motor_driver_context_t*, int32_t dc);
 
 /**
  * @brief Stops motor and reset esp32 if speed exceeds MOTOR_MAX_SPEED_DEGS
  */
-void motor_safety_check(double speed);
+void motor_safety_check(motor_driver_context_t*, double speed);
 
-void motor_fast_stop();
+void motor_fast_stop(motor_driver_context_t*);
 
 
 #endif // MOTOR_H_

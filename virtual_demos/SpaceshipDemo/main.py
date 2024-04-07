@@ -7,14 +7,14 @@ import numpy as np
 import pygame
 
 import asyncio
-import serial_asyncio
-from serial_interface.serial_interface import TwidSerialInterfaceProtocol, run_test, TelemetryFrame
+from serial_interface.serial_interface import *
 
 from game_objects import Asteroid, EnemyProjectile, EnemyShip, PlayerShip, Path
 
+game_interface: TwidSerialInterfaceProtocol
+
 ###SERIAL CONFIGURATION for esp32
 SERIAL_PORT = 'COM9'
-SERIAL_BAUD_RATE = 1000000
 
 # async version of pygame.time.Clock
 class AsyncClock:
@@ -112,7 +112,8 @@ async def run_game(game_interface:TwidSerialInterfaceProtocol):
     #     Asteroid(3*WIDTH//4 - 100, HEIGHT//2 - 100, asteroid_diameter, asteroid_diameter, asteroid_speed),
     # ]
 
-    game_interface.configure_controller_default()
+    await game_interface.update_control_type(TwidID.TWID1_ID, ControlType.POSITION_CTRL)
+    await game_interface.update_pid(TwidID.TWID1_ID, Kp=1, Ki=0, Kd=0.1)
     show_path = True
     
     # Main game loop
@@ -232,14 +233,17 @@ async def run_game(game_interface:TwidSerialInterfaceProtocol):
         pygame.display.flip()
 
         #get the latest telemetry frame
-        if not game_interface.frames.empty():
+        if not game_interface.frames_t1.empty():
+            offset = -140
             target_position = paths[1].get_target(9, screen)
-            game_interface.update_setpoint(position=target_position, velocity=ships[0].velocity, torque= 0.0)
-            latest_frame: TelemetryFrame = game_interface.frames.get_nowait()
-            right_ship.x = latest_frame.position - right_ship.width//2
+            await game_interface.game_update_setpoint(TwidID.TWID1_ID, position=target_position)
+            latest_frame: TelemetryFrame = game_interface.frames_t1.get_nowait()
+            right_ship.x = latest_frame.position + offset
+            print(right_ship.x, target_position)
+            # right_ship.x = latest_frame.position - right_ship.width//2
             # print(f'frame #: {game_interface.frame_count}, frame: {latest_frame}')
 
         # Limit frames per second
         await clock.tick(45)
 
-run_test(run_game, SERIAL_PORT, SERIAL_BAUD_RATE)
+run_test(SERIAL_PORT, run_game)

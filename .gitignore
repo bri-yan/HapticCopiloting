@@ -2,6 +2,7 @@
 .vscode
 __pycache__
 env
+*.log
 
 # Windows default autosave extension
 *.asv

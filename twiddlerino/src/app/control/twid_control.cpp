@@ -32,10 +32,9 @@
 /*                               D E F I N E S                                */
 /******************************************************************************/
 
+#define DEGS_TO_RPM 0.1666667
 #define _ENTER_CRITICAL() portENTER_CRITICAL_SAFE(&spinlock)
 #define _EXIT_CRITICAL() portEXIT_CRITICAL_SAFE(&spinlock)
-
-#define DEGS_TO_RPM 0.1666667
 
 /******************************************************************************/
 /*                              T Y P E D E F S                               */
@@ -46,131 +45,119 @@
 /*            P R I V A T E  F U N C T I O N  P R O T O T Y P E S             */
 /******************************************************************************/
 
-static void pid_callback(void *args);
+static void pid_callback(void *arg);
+
+static void debug_print_cfg(twid_controller_t*);
 
 /******************************************************************************/
 /*               P R I V A T E  G L O B A L  V A R I A B L E S                */
 /******************************************************************************/
+//logtag
+static const char* TAG = "twid_control";
+
+static twid_controller_t controller_1;
+static twid_controller_t controller_2;
+twid_controller_t *controller2_handle = &controller_1;
+twid_controller_t *controller1_handle = &controller_2;
 
 static portMUX_TYPE spinlock = portMUX_INITIALIZER_UNLOCKED;
-
-//controller information to be passed to callback function
-INIT_CONTROLLER_CONFIG(controller_config);
-static setpoint_t setpoint = {.pos = 0.0, .vel =0.0, .accel = 0.0, .torque = 0.0};
-static uint32_t last_time = 0; //last loop timestamp us
-static uint32_t start_time = 0; //start timestamp us
-static uint32_t telem_dt = 0; //telemetry code delta time in us
-static uint32_t itr = 0; //loop 
-static double last_pos = 0;
-static telemetry_t telem;
-static EwmaFilter velocity_filt_ewa(controller_config.velocity_filter_const, 0.0);
-static EwmaFilter current_filt_ewa(controller_config.current_filter_const, 0.0);
-static DiscretePID pid_controller(&controller_config);
-
-//pid timer handle
-//https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/system/esp_timer.html
-static esp_timer_handle_t pid_timer;
 
 /******************************************************************************/
 /*                       P U B L I C  F U N C T I O N S                       */
 /******************************************************************************/
 
-void tcontrol_cfg(controller_config_t* config) {
-    if(tcontrol_is_running()){
-        tcontrol_stop();
-    }
+void tcontrol_init(twid_controller_t* ctrl_handle, controller_config_t* config) {
+    // if(tcontrol_is_running(ctrl_handle)){
+    //     tcontrol_stop(ctrl_handle);
+    // }
+    motor_set_state(ctrl_handle->motor_handle, motor_state_t::MOTOR_LOW);
+    encoder_clear_count(ctrl_handle->encoder_handle);
 
-    controller_config = *config;
-    setpoint = {.pos = 0.0, .vel =0.0, .accel = 0.0};
-    last_time = 0;
-    start_time = 0;
-    telem_dt = 0;
-    last_pos = 0;
-    itr = 0;
-    velocity_filt_ewa = EwmaFilter(controller_config.velocity_filter_const, 0.0);
-    current_filt_ewa = EwmaFilter(controller_config.current_filter_const, 0.0);
-    pid_controller = DiscretePID(&controller_config);
-    telem.current_sps = current_sensor_sps();
-    telem.nframes_sent_queue = 0;
+    ctrl_handle->mutex = xSemaphoreCreateMutex();
+    ctrl_handle->config = *config;
+    ctrl_handle->setpoint = {.pos = 0.0, .vel =0.0, .accel = 0.0};
+    ctrl_handle->last_time = 0;
+    ctrl_handle->start_time = 0;
+    ctrl_handle->telem_dt = 0;
+    ctrl_handle->last_pos = 0;
+    ctrl_handle->itr = 0;
+    ctrl_handle->velocity_filt_ewa = EwmaFilter(ctrl_handle->config.velocity_filter_const, 0.0);
+    ctrl_handle->current_filt_ewa = EwmaFilter(ctrl_handle->config.current_filter_const, 0.0);
+    ctrl_handle->pid_controller = DiscretePID(&ctrl_handle->config);
+    ctrl_handle->telem.current_sps = current_sensor_sps();
+    ctrl_handle->telem.nframes_sent_queue = 0;
 
     const esp_timer_create_args_t timer_args = {
         .callback = pid_callback,
-        .arg = NULL,
+        .arg = ctrl_handle,
         .name = "pid_loop"
     };
 
-    if(pid_timer == NULL){
-        ESP_ERROR_CHECK(esp_timer_create(&timer_args, &pid_timer));
+    if(ctrl_handle->pid_timer == NULL){
+        ESP_ERROR_CHECK(esp_timer_create(&timer_args, &ctrl_handle->pid_timer));
     }
 
-    if(Serial.availableForWrite()){
-        Serial.printf("Controller config complete.\n");
-        print_controller_cfg();
-    }
+    ESP_LOGI(TAG, "controller config complete");
+    debug_print_cfg(ctrl_handle);
 }
 
-void tcontrol_start(){
-    if(!esp_timer_is_active(pid_timer)) {
-        last_time = micros();
-        start_time = micros();
-        ESP_ERROR_CHECK(esp_timer_start_periodic(pid_timer, controller_config.sample_time_us));
-        if(Serial.availableForWrite()){
-            Serial.printf("Controller timer started.\n");
-        }
-    }
-}
-
-void tcontrol_stop(){
-    if(esp_timer_is_active(pid_timer)) {
-        ESP_ERROR_CHECK(esp_timer_stop(pid_timer));
-        if(Serial.availableForWrite()){
-            Serial.printf("Controller timer stopped.\n");
-        }
-    }
-}
-
-void tcontrol_reset(){
-    tcontrol_stop();
-    INIT_CONTROLLER_CONFIG(def);
-    def.telem_queue_handle = controller_config.telem_queue_handle;
-    controller_config = def;
-    tcontrol_cfg(&controller_config);
-    tcontrol_start();
-}
-
-bool tcontrol_is_running(){
-    return esp_timer_is_active(pid_timer);
-}
-
-void tcontrol_get_cfg(controller_config_t* cfg_out) {
+void tcontrol_start(twid_controller_t* ctrl_handle){
     _ENTER_CRITICAL();
-    *cfg_out = controller_config;
+    ESP_LOGD(TAG, "%s starting", ctrl_handle->ctrl_id);
+    if(!esp_timer_is_active(ctrl_handle->pid_timer)) {
+        ctrl_handle->last_time = micros();
+        ctrl_handle->start_time = micros();
+        ESP_ERROR_CHECK(esp_timer_start_periodic(ctrl_handle->pid_timer, ctrl_handle->config.sample_time_us));
+        ESP_LOGD(TAG, "Started pid callback for controller %s with timer with period %lu", ctrl_handle->ctrl_id, ctrl_handle->config.sample_time_us);
+    }
     _EXIT_CRITICAL();
 }
 
-void tcontrol_get_state(telemetry_t* telem_out) {
+void tcontrol_stop(twid_controller_t* ctrl_handle){
     _ENTER_CRITICAL();
-    *telem_out = telem;
+    if(esp_timer_is_active(ctrl_handle->pid_timer)) {
+        ESP_ERROR_CHECK(esp_timer_stop(ctrl_handle->pid_timer));
+        ESP_LOGW(TAG, "stopped control loop with id: %s", ctrl_handle->ctrl_id);
+    }
     _EXIT_CRITICAL();
 }
 
-void tcontrol_update_setpoint(setpoint_t* tp) {
+void tcontrol_reset(twid_controller_t* ctrl_handle){
     _ENTER_CRITICAL();
-    setpoint = *tp;
+    ESP_LOGD(TAG, "tcontrol_reset called for id: %s", ctrl_handle->ctrl_id);
+    tcontrol_stop(ctrl_handle);
+    INIT_CONTROLLER_CONFIG_PARTIAL(def);
+    ctrl_handle->config = def;
+    tcontrol_init(ctrl_handle, &ctrl_handle->config);
+    tcontrol_start(ctrl_handle);
     _EXIT_CRITICAL();
 }
 
-void tcontrol_update_cfg(controller_config_t* cfg) {
+bool tcontrol_is_running(twid_controller_t* ctrl_handle){
+    return esp_timer_is_active(ctrl_handle->pid_timer);
+}
+
+void tcontrol_update_setpoint(twid_controller_t* ctrl_handle, setpoint_t* tp) {
     _ENTER_CRITICAL();
-    controller_config.Kp = cfg->Kp;
-    controller_config.Ki = cfg->Ki;
-    controller_config.Kd = cfg->Kd;
-    controller_config.impedance.K = cfg->impedance.K;
-    controller_config.impedance.J = cfg->impedance.J;
-    controller_config.impedance.B = cfg->impedance.B;
-    controller_config.control_type = cfg->control_type;
-    controller_config.telemetry_sample_rate = cfg->telemetry_sample_rate;
-    pid_controller.set_all_params(&controller_config);
+    ctrl_handle->setpoint = *tp;
+    ESP_LOGD(TAG, "Updated control setpoint to %lf, %lf, %lf, %lf",
+    ctrl_handle->setpoint.pos, ctrl_handle->setpoint.vel, ctrl_handle->setpoint.accel, ctrl_handle->setpoint.torque);
+    debug_print_cfg(ctrl_handle);
+    _EXIT_CRITICAL();
+}
+
+void tcontrol_update_cfg(twid_controller_t* ctrl_handle, controller_config_t* cfg) {
+    _ENTER_CRITICAL();
+    ctrl_handle->config.Kp = cfg->Kp;
+    ctrl_handle->config.Ki = cfg->Ki;
+    ctrl_handle->config.Kd = cfg->Kd;
+    ctrl_handle->config.impedance.K = cfg->impedance.K;
+    ctrl_handle->config.impedance.J = cfg->impedance.J;
+    ctrl_handle->config.impedance.B = cfg->impedance.B;
+    ctrl_handle->config.control_type = cfg->control_type;
+    ctrl_handle->config.telemetry_sample_rate = cfg->telemetry_sample_rate;
+    ctrl_handle->pid_controller.set_all_params(&ctrl_handle->config);
+    debug_print_cfg(ctrl_handle);
     _EXIT_CRITICAL();
 }
 
@@ -180,78 +167,118 @@ void tcontrol_update_cfg(controller_config_t* cfg) {
 
 static void pid_callback(void *args)
 {
-    //sensor read segment 
-    telem.timestamp_ms = (micros() - start_time)/1000.0;
-    telem.loop_dt = micros() - last_time;
-    last_time += telem.loop_dt;
+    twid_controller_t* ctrl = (twid_controller_t*) args;
 
-    telem.read_dt = micros();
-    telem.position = encoder_get_angle();
+    ESP_LOGV(TAG, "entered pid callback for controller id: %s", ctrl->ctrl_id);
+
+    ctrl->telem.ctrl_id = ctrl->ctrl_id;
+
+    //sensor read segment 
+    ctrl->telem.timestamp_ms = (micros() - ctrl->start_time)/1000.0;
+    ctrl->telem.loop_dt = micros() - ctrl->last_time;
+    ctrl->last_time += ctrl->telem.loop_dt;
+
+    ctrl->telem.read_dt = micros();
+    ctrl->telem.position = encoder_get_angle(ctrl->encoder_handle);
 
     //read and filter current
-    telem.current = current_sensor_get_latest_isr();
-    telem.filtered_current = current_filt_ewa(telem.current);
+    ctrl->telem.current_sens_adc_volts = current_sensor_get_volts(ctrl->current_sens_chan);
+    ctrl->telem.current = current_sensor_get_current(ctrl->current_sens_chan);
+    ctrl->telem.filtered_current = ctrl->current_filt_ewa(ctrl->telem.current);
 
     //read and filter velocity
-    // telem.velocity = encoder_get_velocity();
-    telem.velocity = ((telem.position - last_pos)/(controller_config.sample_time_us*1e-6)) * DEGS_TO_RPM;
-    last_pos = telem.position;
+    //velocity is taken as the rate of change of the positional readings in 1 sample time
+    ctrl->telem.velocity = ((ctrl->telem.position - ctrl->last_pos)/(ctrl->config.sample_time_us*1e-6)) * DEGS_TO_RPM;
+    ctrl->last_pos = ctrl->telem.position;
 
-    motor_safety_check(telem.velocity);
+    motor_safety_check(&motor1_handle, ctrl->telem.filtered_velocity);
 
-    telem.filtered_velocity = velocity_filt_ewa(telem.velocity);
+    ctrl->telem.filtered_velocity = ctrl->velocity_filt_ewa(ctrl->telem.velocity);
 
     //calculate torque
-    telem.torque_net = controller_config.motor_Ke * telem.filtered_current;
-    telem.torque_control = controller_config.motor_Ke * lookup_exp_current((double)motor_get_duty_cycle()); //controller_config.motor_Kv * telem.filtered_velocity;
-    if (motor_get_state() == motor_state_t::MOTOR_DRIVE_CCW) {
-        telem.torque_control *= -1;
+    ctrl->telem.torque_net = ctrl->config.motor_Ke * ctrl->telem.filtered_current;
+    ctrl->telem.torque_control = ctrl->config.motor_Ke * lookup_exp_current((double)motor_get_duty_cycle(&motor1_handle)); //controller_config.motor_Kv * telem.filtered_velocity;
+    if (motor_get_state(&motor1_handle) == motor_state_t::MOTOR_DRIVE_CCW) {
+        ctrl->telem.torque_control *= -1;
     }
-    telem.torque_external = telem.torque_net - telem.torque_control;
+    ctrl->telem.torque_external = ctrl->telem.torque_net - ctrl->telem.torque_control;
 
-    telem.read_dt = micros() - telem.read_dt;
+    ctrl->telem.read_dt = micros() - ctrl->telem.read_dt;
 
     //control segment
-    telem.control_dt = micros();
-    telem.pid_success_flag = 1;
+    ctrl->telem.control_dt = micros();
+    ctrl->telem.pid_success_flag = 1;
     auto feedback_signal = 0.0;
     auto output_signal = 0.0;
     auto setpoint_signal = 0.0;
 
     //ratio between real (empircal) and desired inertia
-    auto jjv = controller_config.motor_J / controller_config.impedance.J;
+    auto jjv = ctrl->config.motor_J / ctrl->config.impedance.J;
 
     //controller mode, select signal
-    switch(controller_config.control_type) {
+    switch(ctrl->config.control_type) {
         case control_type_t::POSITION_CTRL:
-            feedback_signal = telem.position;
-            setpoint_signal = setpoint.pos;
+            feedback_signal = ctrl->telem.position;
+            setpoint_signal = ctrl->setpoint.pos;
             break;
         case control_type_t::VELOCITY_CTRL:
-            feedback_signal = telem.filtered_velocity;
-            setpoint_signal = setpoint.vel;
+            feedback_signal = ctrl->telem.filtered_velocity;
+            setpoint_signal = ctrl->setpoint.vel;
             break;
         case control_type_t::TORQUE_CTRL:
             //we are controlling the net torque through current control
-            feedback_signal = telem.filtered_current;
-            setpoint_signal = setpoint.torque / controller_config.motor_Ke;;
+            feedback_signal = ctrl->telem.filtered_current;
+            setpoint_signal = ctrl->setpoint.torque / ctrl->config.motor_Ke;;
+            break;
+        case control_type_t::IMPEDANCE_CTRL_SPRING:
+            //apply spring impedance law
+            setpoint_signal = 
+            ((ctrl->config.motor_Kv * ctrl->telem.filtered_velocity) 
+            + ((ctrl->config.impedance.K) * (ctrl->setpoint.pos - ctrl->telem.position))) 
+            / ctrl->config.motor_Ke;
+
+            //feeback signal is current
+            feedback_signal = ctrl->telem.current;
+            break;
+        case control_type_t::IMPEDANCE_CTRL_DAMPING:
+            //apply damping impedance law
+            setpoint_signal = 
+            ((ctrl->config.motor_Kv * ctrl->telem.filtered_velocity) 
+            + (ctrl->config.impedance.B) * (ctrl->setpoint.vel - ctrl->telem.filtered_velocity)) 
+            / ctrl->config.motor_Ke;
+            feedback_signal = ctrl->telem.current;
+            break;
+        case control_type_t::IMPEDANCE_CTRL_SPRING_DAMPING:
+            //apply impedance law, the setpoint signal is a torque
+            setpoint_signal = (ctrl->config.motor_Kv * ctrl->telem.filtered_velocity) + 
+                ((ctrl->config.impedance.K) * (ctrl->setpoint.pos - ctrl->telem.position)) +
+                ((ctrl->config.impedance.B) * (ctrl->setpoint.vel - ctrl->telem.filtered_velocity));
+            setpoint_signal/=ctrl->config.motor_Ke;
+            feedback_signal = ctrl->telem.current;
+            break;
+        case control_type_t::IMPEDANCE_CTRL_IGNORE_T_EXT:
+            //apply impedance law, the setpoint signal is a torque
+            setpoint_signal = (ctrl->config.motor_J * ctrl->setpoint.accel) + 
+                (ctrl->config.motor_Kv * ctrl->telem.filtered_velocity) + 
+                ((jjv * ctrl->config.impedance.K) * (ctrl->setpoint.pos - ctrl->telem.position)) +
+                ((jjv * ctrl->config.impedance.B) * (ctrl->setpoint.vel - ctrl->telem.filtered_velocity));
+            //convert torque to current for current control
+            setpoint_signal/=ctrl->config.motor_Ke;
+            feedback_signal = ctrl->telem.current;
             break;
         case control_type_t::IMPEDANCE_CTRL:
             //apply impedance law, the setpoint signal is a torque
-            setpoint_signal = (controller_config.motor_J * setpoint.accel) + 
-                (telem.torque_external * (1- jjv)) + 
-                (controller_config.motor_Kv * telem.filtered_velocity) + 
-                ((jjv * controller_config.impedance.K) * (setpoint.pos - telem.position)) +
-                ((jjv * controller_config.impedance.B) * (setpoint.vel - telem.filtered_velocity));
-            //convert torque to current for current control
-            setpoint_signal/=controller_config.motor_Ke;
-            
-            //feeback signal is current
-            feedback_signal = telem.current;
+            setpoint_signal = (ctrl->config.motor_J * ctrl->setpoint.accel) + 
+                (ctrl->telem.torque_external * (1 - jjv)) + 
+                (ctrl->config.motor_Kv * ctrl->telem.filtered_velocity) + 
+                ((jjv * ctrl->config.impedance.K) * (ctrl->setpoint.pos - ctrl->telem.position)) +
+                ((jjv * ctrl->config.impedance.B) * (ctrl->setpoint.vel - ctrl->telem.filtered_velocity));
+            setpoint_signal/= ctrl->config.motor_Ke;
+            feedback_signal = ctrl->telem.current;
             break;
         case control_type_t::ADMITTANCE_CTRL:
-            feedback_signal = 0;
-            setpoint_signal = 0;
+            feedback_signal = ctrl->telem.torque_external/ctrl->config.impedance.K + ctrl->setpoint.pos;
+            feedback_signal = ctrl->telem.current;
             break;
         default:
             feedback_signal = 0;
@@ -259,42 +286,36 @@ static void pid_callback(void *args)
             break;
     }
 
-    output_signal = pid_controller.compute(feedback_signal, setpoint_signal);
-    telem.error = pid_controller.get_error();
-
-    // if(ENABLE_OUTPUT_SIGNAL_CORRECTION) {
-    //     if (telem.error > OUTPUT_SIGNAL_CORRECTION_THRESHOLD) {
-    //         output_signal += OUTPUT_SIGNAL_CORRECTION_VALUE;
-    //     } else {
-    //         output_signal -= OUTPUT_SIGNAL_CORRECTION_VALUE;
-    //     }
-    // }
+    output_signal = ctrl->pid_controller.compute(feedback_signal, setpoint_signal);
+    ctrl->telem.error = ctrl->pid_controller.get_error();
 
     //apply control signal
-    if(controller_config.control_type != control_type_t::NO_CTRL) {
-        motor_set_pwm(output_signal);
+    if(ctrl->config.control_type != control_type_t::NO_CTRL) {
+        motor_set_pwm(ctrl->motor_handle, output_signal);
     }
-    telem.pwm_duty_cycle = (double)motor_get_duty_cycle();
+    ctrl->telem.pwm_duty_cycle = (double)motor_get_duty_cycle(ctrl->motor_handle);
 
-    telem.pwm_frequency = motor_get_frequency();
-    telem.control_dt = micros() - telem.control_dt;
+    ctrl->telem.pwm_frequency = motor_get_frequency(ctrl->motor_handle);
+    ctrl->telem.control_dt = micros() - ctrl->telem.control_dt;
 
     //fill and return telemetry structure
-    telem.telemetry_dt = telem_dt; //get last telemetry delta time
-    telem_dt = micros();
-    telem.setpoint = setpoint;
-    telem.Kp = controller_config.Kp;
-    telem.Ki = controller_config.Ki;
-    telem.Kd = controller_config.Kd;
-    telem.impedance = controller_config.impedance;
+    ctrl->telem.telemetry_dt = ctrl->telem_dt; //get last telemetry delta time
+    ctrl->telem_dt = micros();
+    ctrl->telem.setpoint = ctrl->setpoint;
+    ctrl->telem.Kp = ctrl->config.Kp;
+    ctrl->telem.Ki = ctrl->config.Ki;
+    ctrl->telem.Kd = ctrl->config.Kd;
+    ctrl->telem.impedance = ctrl->config.impedance;
+    ctrl->telem.control_type = ctrl->config.control_type;
 
-    if((itr % controller_config.telemetry_sample_rate) == 0 && controller_config.telem_queue_handle != NULL) {
+    if((ctrl->itr % ctrl->config.telemetry_sample_rate) == 0 && ctrl->telem_queue_handle != NULL) {
         BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-        telem.nframes_sent_queue+=1;
-        xQueueSendFromISR(*controller_config.telem_queue_handle, &telem, &xHigherPriorityTaskWoken);
+        xHigherPriorityTaskWoken = pdFALSE;
+        ctrl->telem.nframes_sent_queue+=1;
+        xQueueSendFromISR(ctrl->telem_queue_handle, &ctrl->telem, &xHigherPriorityTaskWoken);
     }
-    itr++;
-    telem_dt = micros() - telem_dt;
+    ctrl->itr++;
+    ctrl->telem_dt = micros() - ctrl->telem_dt;
 }
 
 /******************************************************************************/
@@ -403,4 +424,12 @@ double DiscretePID::get_ki() {
 
 double DiscretePID::get_kd() {
     return Kd;
+}
+
+static void debug_print_cfg(twid_controller_t* ctrl_handle) {
+    ESP_LOGD(TAG, "%s CONTROLLER CONFIGURATION:\n*control_type:%i\t*sample_time:%lu us\n*Kp:%lf\t*Ki:%lf\t*Kd:%lf\n*stiffness:%lf\t*damping:%lf\t*intertia:%lf",
+        ctrl_handle->ctrl_id, ctrl_handle->config.control_type, 
+        ctrl_handle->config.sample_time_us, ctrl_handle->config.Kp, 
+        ctrl_handle->config.Ki, ctrl_handle->config.Kd, ctrl_handle->config.impedance.K, 
+        ctrl_handle->config.impedance.B, ctrl_handle->config.impedance.J);
 }

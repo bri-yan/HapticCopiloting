@@ -1,7 +1,7 @@
 {
-    "frameEnd": "*/",
+    "frameEnd": "**/",
     "frameParser": "/* \r\n * @brief Frame parsing function, you can modify this to suit your needs.\r\n * \r\n * By customizing this code, you can use a single JSON project file to \r\n * process different kinds of frames that are sent by the microcontroller \r\n * or any data source that is connected to Serial Studio. Frame parsing code\r\n * is specific to every JSON project that you create.\r\n *\r\n * @param frame      string with the latest received frame.\r\n * @param separator  data separator sequence defined by the JSON project.\r\n *\r\n * @note.            only data that is *inside* the data delimiters will\r\n *                   be processed by the frame parser.\r\n *\r\n * @note             you can safely declare global variables outside the\r\n *                   @c parse() function.\r\n */\r\nfunction parse(frame, separator) {\r\n    return frame.split(separator);\r\n}",
-    "frameStart": "/*",
+    "frameStart": "/**",
     "groups": [
         {
             "datasets": [
@@ -127,7 +127,7 @@
                     "max": 0,
                     "min": 0,
                     "title": "velocity",
-                    "units": "deg/s",
+                    "units": "rpm",
                     "value": "",
                     "widget": ""
                 },
@@ -142,7 +142,7 @@
                     "max": 0,
                     "min": 0,
                     "title": "filtered velocity",
-                    "units": "deg/s",
+                    "units": "rpm",
                     "value": "",
                     "widget": ""
                 },
@@ -280,6 +280,21 @@
                     "units": "Nm",
                     "value": "",
                     "widget": ""
+                },
+                {
+                    "alarm": 0,
+                    "fft": false,
+                    "fftSamples": 1024,
+                    "graph": true,
+                    "index": 29,
+                    "led": false,
+                    "log": false,
+                    "max": 0,
+                    "min": 0,
+                    "title": "CS ADC Volts",
+                    "units": "Volts",
+                    "value": "",
+                    "widget": ""
                 }
             ],
             "title": "State Data",
@@ -374,6 +389,21 @@
                     "min": 0,
                     "title": "intertia",
                     "units": "",
+                    "value": "",
+                    "widget": ""
+                },
+                {
+                    "alarm": 0,
+                    "fft": false,
+                    "fftSamples": 1024,
+                    "graph": false,
+                    "index": 28,
+                    "led": false,
+                    "log": false,
+                    "max": 0,
+                    "min": 0,
+                    "title": "Control Type",
+                    "units": "ID",
                     "value": "",
                     "widget": ""
                 }
