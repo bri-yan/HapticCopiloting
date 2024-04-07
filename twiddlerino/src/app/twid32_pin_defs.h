@@ -18,6 +18,9 @@
 /*                               D E F I N E S                                */
 /******************************************************************************/
 
+//REF
+//https://docs.espressif.com/projects/esp-idf/en/latest/esp32/hw-reference/esp32/get-started-devkitc.html#pin-layout
+
 //encoders
 #define PIN_ENCODER1_QUAD_A  gpio_num_t::GPIO_NUM_26  //Encoder 1 quaderture signal A
 #define PIN_ENCODER1_QUAD_B  gpio_num_t::GPIO_NUM_25   //Encoder 1 quaderture signal B
@@ -29,6 +32,12 @@
 #define PIN_CURRENT_SENS_ADC_SCL  gpio_num_t::GPIO_NUM_22
 #define PIN_CURRENT_SENS_ADC_SDA  gpio_num_t::GPIO_NUM_21
 #define PIN_CURRENT_SENS_ADC_ALERT gpio_num_t::GPIO_NUM_19
+
+#define PIN_CURRENT_SENS_1_ANALOG  gpio_num_t::GPIO_NUM_36 //this pin goes to channel ADC1_0
+#define CURRENT_SENS_1_ADC_CHAN   adc_channel_t::ADC_CHANNEL_0
+
+#define PIN_CURRENT_SENS_2_ANALOG  gpio_num_t::GPIO_NUM_34 //this pin goes to channel ADC2_5
+#define CURRENT_SENS_2_ADC_CHAN   adc_channel_t::ADC_CHANNEL_6
 
 //motors
 #define PIN_MOTOR1_POWER     gpio_num_t::GPIO_NUM_16  //motor 1 power (pwm) signal

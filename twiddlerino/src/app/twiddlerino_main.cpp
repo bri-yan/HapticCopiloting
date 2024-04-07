@@ -114,7 +114,9 @@ void twiddlerino_setup() {
     .filter = ENCODER_DEFAULT_FILTER};
 
   //error checks handled inside init functions
-  current_sensor_init();
+  ads115_sens_init();
+
+  curr_sens_adc_init();;
 
   encoder_init(&encoder1_handle);
   encoder_init(&encoder2_handle);
@@ -216,7 +218,8 @@ void TaskRunTControl(void *pvParameters){
   controller1_handle->telem_queue_handle = xQueueTelemetry;
   controller1_handle->motor_handle = &motor1_handle;
   controller1_handle->encoder_handle = &encoder1_handle;
-  controller1_handle->current_sens_chan = curr_sens_adc_channel_t::CURRENT_SENSOR_1;
+  controller1_handle->ads115_curr_sens_chan = ads115_adc_channel_t::CURRENT_SENSOR_1;
+  controller1_handle->curr_sens_handle = curr_sens_1_handle;
   tcontrol_init(controller1_handle, &(controller1_handle->config));
   tcontrol_start(controller1_handle);
   ESP_LOGI(TAG, "Controller %s loop status: %i\n", controller1_handle->ctrl_id,  tcontrol_is_running(controller1_handle));
@@ -227,7 +230,8 @@ void TaskRunTControl(void *pvParameters){
     controller2_handle->telem_queue_handle = xQueueTelemetry;
     controller2_handle->motor_handle = &motor2_handle;
     controller2_handle->encoder_handle = &encoder2_handle;
-    controller2_handle->current_sens_chan = curr_sens_adc_channel_t::CURRENT_SENSOR_2;
+    controller2_handle->ads115_curr_sens_chan = ads115_adc_channel_t::CURRENT_SENSOR_2;
+    controller2_handle->curr_sens_handle = curr_sens_2_handle;
 
     tcontrol_init(controller2_handle, &(controller2_handle->config));
     tcontrol_start(controller2_handle);

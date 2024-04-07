@@ -84,7 +84,7 @@ void tcontrol_init(twid_controller_t* ctrl_handle, controller_config_t* config) 
     ctrl_handle->velocity_filt_ewa = EwmaFilter(ctrl_handle->config.velocity_filter_const, 0.0);
     ctrl_handle->current_filt_ewa = EwmaFilter(ctrl_handle->config.current_filter_const, 0.0);
     ctrl_handle->pid_controller = DiscretePID(&ctrl_handle->config);
-    ctrl_handle->telem.current_sps = current_sensor_sps();
+    ctrl_handle->telem.current_sps = ads115_sens_get_sps();
     ctrl_handle->telem.nframes_sent_queue = 0;
 
     const esp_timer_create_args_t timer_args = {
@@ -182,8 +182,8 @@ static void pid_callback(void *args)
     ctrl->telem.position = encoder_get_angle(ctrl->encoder_handle);
 
     //read and filter current
-    ctrl->telem.current_sens_adc_volts = current_sensor_get_volts(ctrl->current_sens_chan);
-    ctrl->telem.current = current_sensor_get_current(ctrl->current_sens_chan);
+    ctrl->telem.current_sens_adc_volts = curr_sens_adc_get_volts(ctrl->curr_sens_handle); // ads115_get_volts(ctrl->ads115_curr_sens_chan);
+    ctrl->telem.current = curr_sens_convert_current(ctrl->curr_sens_handle ,ctrl->telem.current_sens_adc_volts); // current_sensor_get_current(ctrl->ads115_curr_sens_chan);
     ctrl->telem.filtered_current = ctrl->current_filt_ewa(ctrl->telem.current);
 
     //read and filter velocity

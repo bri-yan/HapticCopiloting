@@ -75,7 +75,8 @@ struct twid_controller_t {
     //hardware handles
     motor_driver_context_t* motor_handle;
     encoder_context_t* encoder_handle;
-    curr_sens_adc_channel_t current_sens_chan;
+    ads115_adc_channel_t ads115_curr_sens_chan;
+    curr_sens_adc_context_t* curr_sens_handle;
 
     //filters
     //default is no filtering
