@@ -32,7 +32,7 @@
 #define TELEMETRY_DEFAULT_SAMPLE_RATE 20U //telemetry sample rate in (control loops)/sample
 #define FREE_RTOS_TELEM_SAMPLE_RATE 5000U //MS
 
-#define ENABLE_SECOND_CONTROLLER 0
+#define ENABLE_SECOND_CONTROLLER 1
 
 //hardware config
 //encoder
