@@ -7,16 +7,14 @@ import numpy as np
 import pygame
 
 import asyncio
-import serial_asyncio
-from game_interface import GameInterfaceProtocol, TelemetryFrame
+from serial_interface.serial_interface import *
 
 from game_objects import Asteroid, EnemyProjectile, EnemyShip, PlayerShip, Path
 
-game_interface: GameInterfaceProtocol
+game_interface: TwidSerialInterfaceProtocol
 
 ###SERIAL CONFIGURATION for esp32
-SERIAL_PORT = 'COM4'
-SERIAL_BAUD_RATE = 1000000
+SERIAL_PORT = 'COM9'
 
 # async version of pygame.time.Clock
 class AsyncClock:
@@ -39,11 +37,7 @@ class AsyncClock:
  
         await asyncio.sleep(delay)
 
-async def run_game():
-    global game_interface, loop
-    transport, game_interface = await serial_asyncio.create_serial_connection(loop, GameInterfaceProtocol, SERIAL_PORT, baudrate=SERIAL_BAUD_RATE)
-    await asyncio.sleep(0.5) #wait for connection to init
-
+async def run_game(game_interface:TwidSerialInterfaceProtocol):
     # Colors
     WHITE = (255, 255, 255)
     GRAY = (50, 50, 50)
@@ -118,7 +112,8 @@ async def run_game():
     #     Asteroid(3*WIDTH//4 - 100, HEIGHT//2 - 100, asteroid_diameter, asteroid_diameter, asteroid_speed),
     # ]
 
-    game_interface.configure_controller_default()
+    await game_interface.update_control_type(TwidID.TWID1_ID, ControlType.POSITION_CTRL)
+    await game_interface.update_pid(TwidID.TWID1_ID, Kp=1, Ki=0, Kd=0.1)
     show_path = True
     
     # Main game loop
@@ -238,11 +233,11 @@ async def run_game():
         pygame.display.flip()
 
         #get the latest telemetry frame
-        if not game_interface.frames.empty():
+        if not game_interface.frames_t1.empty():
             offset = -140
             target_position = paths[1].get_target(9, screen)
-            game_interface.update_setpoint(position=target_position, velocity=0.0, torque= 0.0)
-            latest_frame: TelemetryFrame = game_interface.frames.get_nowait()
+            await game_interface.game_update_setpoint(TwidID.TWID1_ID, position=target_position)
+            latest_frame: TelemetryFrame = game_interface.frames_t1.get_nowait()
             right_ship.x = latest_frame.position + offset
             print(right_ship.x, target_position)
             # right_ship.x = latest_frame.position - right_ship.width//2
@@ -251,6 +246,4 @@ async def run_game():
         # Limit frames per second
         await clock.tick(45)
 
-loop = asyncio.get_event_loop()
-loop.run_until_complete(run_game())
-loop.close()
+run_test(SERIAL_PORT, run_game)

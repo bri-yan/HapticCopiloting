@@ -104,7 +104,7 @@ struct twid_controller_t {
 
 //configure controller and timer isr
 //this function must be run before tcontrol_start or an error will be thrown
-void tcontrol_cfg(twid_controller_t*, controller_config_t*);
+void tcontrol_init(twid_controller_t*, controller_config_t*);
 
 //starts control timer isr
 void tcontrol_start(twid_controller_t*);

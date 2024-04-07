@@ -213,25 +213,23 @@ void TaskRunTControl(void *pvParameters){
   INIT_CONTROLLER_CONFIG_PARTIAL(default_config);
   controller1_handle->config = default_config;
   controller1_handle->ctrl_id = TWID1_ID;
-  controller1_handle->mutex = xSemaphoreCreateMutex();
   controller1_handle->telem_queue_handle = xQueueTelemetry;
-  controller2_handle->config = default_config;
   controller1_handle->motor_handle = &motor1_handle;
   controller1_handle->encoder_handle = &encoder1_handle;
   controller1_handle->current_sens_chan = curr_sens_adc_channel_t::CURRENT_SENSOR_1;
-  tcontrol_cfg(controller1_handle, &(controller1_handle->config));
+  tcontrol_init(controller1_handle, &(controller1_handle->config));
   tcontrol_start(controller1_handle);
   ESP_LOGI(TAG, "Controller %s loop status: %i\n", controller1_handle->ctrl_id,  tcontrol_is_running(controller1_handle));
 
   if (ENABLE_SECOND_CONTROLLER) {
+    controller2_handle->config = default_config;
     controller2_handle->ctrl_id = TWID2_ID;
-    controller2_handle->mutex = xSemaphoreCreateMutex();
     controller2_handle->telem_queue_handle = xQueueTelemetry;
     controller2_handle->motor_handle = &motor2_handle;
     controller2_handle->encoder_handle = &encoder2_handle;
     controller2_handle->current_sens_chan = curr_sens_adc_channel_t::CURRENT_SENSOR_2;
 
-    tcontrol_cfg(controller2_handle, &(controller2_handle->config));
+    tcontrol_init(controller2_handle, &(controller2_handle->config));
     tcontrol_start(controller2_handle);
 
     ESP_LOGI(TAG, "Controller %s loop status: %i\n", controller2_handle->ctrl_id,  tcontrol_is_running(controller2_handle));

@@ -116,13 +116,13 @@ cmd_type_t handle_command(String *str) {
         cfg.Kp = elements[i0].toDouble();
         cfg.Ki = elements[i0+1].toDouble();
         cfg.Kd = elements[i0+2].toDouble();
-        tcontrol_cfg(ctrl, &cfg);
+        tcontrol_update_cfg(ctrl, &cfg);
         return cmd_type_t::SET_PID;
     } else if(str->substring(0,13) == "set_impedance" && num_elements >= 3) {
         cfg.impedance.K = elements[i0].toDouble();
         cfg.impedance.B = elements[i0+1].toDouble();
         cfg.impedance.J = elements[i0+2].toDouble();
-        tcontrol_cfg(ctrl, &cfg);
+        tcontrol_update_cfg(ctrl, &cfg);
         return cmd_type_t::SET_IMPEDANCE;
     } else if(str->substring(0,8) == "set_mode" && num_elements >= 1) {
         auto name = elements[i0];
@@ -153,14 +153,14 @@ cmd_type_t handle_command(String *str) {
         }
 
         cfg.control_type = mode;
-        tcontrol_cfg(ctrl, &cfg);
+        tcontrol_update_cfg(ctrl, &cfg);
         return cmd_type_t::SET_MODE;
     } else if(str->substring(0,19) == "set_telemsamplerate" && num_elements >= 1) {
         ESP_LOGD(TAG, "%s", *str);
         auto val = elements[i0].toInt();
         if (val >= 1) {
             cfg.telemetry_sample_rate = (uint32_t)val;
-            tcontrol_cfg(ctrl, &cfg);
+            tcontrol_update_cfg(ctrl, &cfg);
             return cmd_type_t::SET_TELEMSAMPLERATE;
         }
     } else if(str->substring(0,12) == "set_setpoint" && num_elements >= 4){

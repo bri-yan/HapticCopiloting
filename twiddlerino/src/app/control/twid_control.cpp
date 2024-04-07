@@ -33,6 +33,8 @@
 /******************************************************************************/
 
 #define DEGS_TO_RPM 0.1666667
+#define _ENTER_CRITICAL() portENTER_CRITICAL_SAFE(&spinlock)
+#define _EXIT_CRITICAL() portEXIT_CRITICAL_SAFE(&spinlock)
 
 /******************************************************************************/
 /*                              T Y P E D E F S                               */
@@ -45,6 +47,8 @@
 
 static void pid_callback(void *arg);
 
+static void debug_print_cfg(twid_controller_t*);
+
 /******************************************************************************/
 /*               P R I V A T E  G L O B A L  V A R I A B L E S                */
 /******************************************************************************/
@@ -56,17 +60,20 @@ static twid_controller_t controller_2;
 twid_controller_t *controller2_handle = &controller_1;
 twid_controller_t *controller1_handle = &controller_2;
 
+static portMUX_TYPE spinlock = portMUX_INITIALIZER_UNLOCKED;
+
 /******************************************************************************/
 /*                       P U B L I C  F U N C T I O N S                       */
 /******************************************************************************/
 
-void tcontrol_cfg(twid_controller_t* ctrl_handle, controller_config_t* config) {
+void tcontrol_init(twid_controller_t* ctrl_handle, controller_config_t* config) {
     // if(tcontrol_is_running(ctrl_handle)){
     //     tcontrol_stop(ctrl_handle);
     // }
     motor_set_state(ctrl_handle->motor_handle, motor_state_t::MOTOR_LOW);
     encoder_clear_count(ctrl_handle->encoder_handle);
 
+    ctrl_handle->mutex = xSemaphoreCreateMutex();
     ctrl_handle->config = *config;
     ctrl_handle->setpoint = {.pos = 0.0, .vel =0.0, .accel = 0.0};
     ctrl_handle->last_time = 0;
@@ -91,10 +98,11 @@ void tcontrol_cfg(twid_controller_t* ctrl_handle, controller_config_t* config) {
     }
 
     ESP_LOGI(TAG, "controller config complete");
-    print_controller_cfg(ctrl_handle);
+    debug_print_cfg(ctrl_handle);
 }
 
 void tcontrol_start(twid_controller_t* ctrl_handle){
+    _ENTER_CRITICAL();
     ESP_LOGD(TAG, "%s starting", ctrl_handle->ctrl_id);
     if(!esp_timer_is_active(ctrl_handle->pid_timer)) {
         ctrl_handle->last_time = micros();
@@ -102,22 +110,27 @@ void tcontrol_start(twid_controller_t* ctrl_handle){
         ESP_ERROR_CHECK(esp_timer_start_periodic(ctrl_handle->pid_timer, ctrl_handle->config.sample_time_us));
         ESP_LOGD(TAG, "Started pid callback for controller %s with timer with period %lu", ctrl_handle->ctrl_id, ctrl_handle->config.sample_time_us);
     }
+    _EXIT_CRITICAL();
 }
 
 void tcontrol_stop(twid_controller_t* ctrl_handle){
+    _ENTER_CRITICAL();
     if(esp_timer_is_active(ctrl_handle->pid_timer)) {
         ESP_ERROR_CHECK(esp_timer_stop(ctrl_handle->pid_timer));
         ESP_LOGW(TAG, "stopped control loop with id: %s", ctrl_handle->ctrl_id);
     }
+    _EXIT_CRITICAL();
 }
 
 void tcontrol_reset(twid_controller_t* ctrl_handle){
+    _ENTER_CRITICAL();
     ESP_LOGD(TAG, "tcontrol_reset called for id: %s", ctrl_handle->ctrl_id);
     tcontrol_stop(ctrl_handle);
     INIT_CONTROLLER_CONFIG_PARTIAL(def);
     ctrl_handle->config = def;
-    tcontrol_cfg(ctrl_handle, &ctrl_handle->config);
+    tcontrol_init(ctrl_handle, &ctrl_handle->config);
     tcontrol_start(ctrl_handle);
+    _EXIT_CRITICAL();
 }
 
 bool tcontrol_is_running(twid_controller_t* ctrl_handle){
@@ -125,15 +138,16 @@ bool tcontrol_is_running(twid_controller_t* ctrl_handle){
 }
 
 void tcontrol_update_setpoint(twid_controller_t* ctrl_handle, setpoint_t* tp) {
-    xSemaphoreTake(ctrl_handle->mutex, portMAX_DELAY);
+    _ENTER_CRITICAL();
     ctrl_handle->setpoint = *tp;
     ESP_LOGD(TAG, "Updated control setpoint to %lf, %lf, %lf, %lf",
     ctrl_handle->setpoint.pos, ctrl_handle->setpoint.vel, ctrl_handle->setpoint.accel, ctrl_handle->setpoint.torque);
-    xSemaphoreGive(ctrl_handle->mutex);
+    debug_print_cfg(ctrl_handle);
+    _EXIT_CRITICAL();
 }
 
 void tcontrol_update_cfg(twid_controller_t* ctrl_handle, controller_config_t* cfg) {
-    xSemaphoreTake(ctrl_handle->mutex, portMAX_DELAY);
+    _ENTER_CRITICAL();
     ctrl_handle->config.Kp = cfg->Kp;
     ctrl_handle->config.Ki = cfg->Ki;
     ctrl_handle->config.Kd = cfg->Kd;
@@ -143,7 +157,8 @@ void tcontrol_update_cfg(twid_controller_t* ctrl_handle, controller_config_t* cf
     ctrl_handle->config.control_type = cfg->control_type;
     ctrl_handle->config.telemetry_sample_rate = cfg->telemetry_sample_rate;
     ctrl_handle->pid_controller.set_all_params(&ctrl_handle->config);
-    xSemaphoreGive(ctrl_handle->mutex);
+    debug_print_cfg(ctrl_handle);
+    _EXIT_CRITICAL();
 }
 
 /******************************************************************************/
@@ -153,8 +168,6 @@ void tcontrol_update_cfg(twid_controller_t* ctrl_handle, controller_config_t* cf
 static void pid_callback(void *args)
 {
     twid_controller_t* ctrl = (twid_controller_t*) args;
-    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-    xSemaphoreTakeFromISR(ctrl->mutex, &xHigherPriorityTaskWoken);
 
     ESP_LOGV(TAG, "entered pid callback for controller id: %s", ctrl->ctrl_id);
 
@@ -296,14 +309,13 @@ static void pid_callback(void *args)
     ctrl->telem.control_type = ctrl->config.control_type;
 
     if((ctrl->itr % ctrl->config.telemetry_sample_rate) == 0 && ctrl->telem_queue_handle != NULL) {
+        BaseType_t xHigherPriorityTaskWoken = pdFALSE;
         xHigherPriorityTaskWoken = pdFALSE;
         ctrl->telem.nframes_sent_queue+=1;
         xQueueSendFromISR(ctrl->telem_queue_handle, &ctrl->telem, &xHigherPriorityTaskWoken);
     }
     ctrl->itr++;
     ctrl->telem_dt = micros() - ctrl->telem_dt;
-
-    xSemaphoreGiveFromISR(ctrl->mutex, &xHigherPriorityTaskWoken);
 }
 
 /******************************************************************************/
@@ -412,4 +424,12 @@ double DiscretePID::get_ki() {
 
 double DiscretePID::get_kd() {
     return Kd;
+}
+
+static void debug_print_cfg(twid_controller_t* ctrl_handle) {
+    ESP_LOGD(TAG, "%s CONTROLLER CONFIGURATION:\n*control_type:%i\t*sample_time:%lu us\n*Kp:%lf\t*Ki:%lf\t*Kd:%lf\n*stiffness:%lf\t*damping:%lf\t*intertia:%lf",
+        ctrl_handle->ctrl_id, ctrl_handle->config.control_type, 
+        ctrl_handle->config.sample_time_us, ctrl_handle->config.Kp, 
+        ctrl_handle->config.Ki, ctrl_handle->config.Kd, ctrl_handle->config.impedance.K, 
+        ctrl_handle->config.impedance.B, ctrl_handle->config.impedance.J);
 }
