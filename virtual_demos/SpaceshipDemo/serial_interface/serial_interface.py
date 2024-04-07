@@ -43,9 +43,10 @@ _LOG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)),'logs')
 if not os.path.exists(_LOG_DIR):
     os.mkdir(_LOG_DIR)
 
-_LOG_FILE = os.path.join(_LOG_DIR, f'{_LOG_NAME}_{time.strftime('%Y-%m-%d_%H-%M')}.log')
-_TELEM_LOG_FILE = os.path.join(_LOG_DIR, f'telemetry_frame_{time.strftime('%Y-%m-%d_%H-%M')}.log')
-_SERIALDEBUG_LOG_FILE = os.path.join(_LOG_DIR, f'serial_debug_dump_{time.strftime('%Y-%m-%d_%H-%M')}.log')      
+time_str = time.strftime('%Y-%m-%d_%H-%M')
+_LOG_FILE = os.path.join(_LOG_DIR, f'{_LOG_NAME}_{time_str}.log')
+_TELEM_LOG_FILE = os.path.join(_LOG_DIR, f'telemetry_frame_{time_str}.log')
+_SERIALDEBUG_LOG_FILE = os.path.join(_LOG_DIR, f'serial_debug_dump_{time_str}.log')      
 
 #python copy of control_type_t in esp32 firmware
 class ControlType(Enum):

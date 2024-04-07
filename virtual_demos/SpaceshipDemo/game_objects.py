@@ -194,7 +194,7 @@ class Breadcrumb(pygame.Rect):
         return self.y + self.height//2
 
 class Path:
-    def __init__(self, width, height, x, y_bot, y_top, num_breadcrumbs=10, padding=75):
+    def __init__(self, width, height, x, y_bot, y_top, num_breadcrumbs=10, padding=100):
         self.x = x
         dy = abs(y_top - y_bot) / num_breadcrumbs
         self.breadcrumbs = [Breadcrumb(x, int(y_bot - i*dy), width, height, padding) for i in range(num_breadcrumbs)]

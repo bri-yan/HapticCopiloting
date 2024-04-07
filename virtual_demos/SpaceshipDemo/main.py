@@ -14,7 +14,7 @@ from game_objects import Asteroid, EnemyProjectile, EnemyShip, PlayerShip, Path
 game_interface: TwidSerialInterfaceProtocol
 
 ###SERIAL CONFIGURATION for esp32
-SERIAL_PORT = 'COM9'
+SERIAL_PORT = 'COM5'
 
 # async version of pygame.time.Clock
 class AsyncClock:
@@ -113,7 +113,9 @@ async def run_game(game_interface:TwidSerialInterfaceProtocol):
     # ]
 
     await game_interface.update_control_type(TwidID.TWID1_ID, ControlType.POSITION_CTRL)
-    await game_interface.update_pid(TwidID.TWID1_ID, Kp=1, Ki=0, Kd=0.1)
+    await game_interface.update_pid(TwidID.TWID1_ID, Kp=2.5, Ki=0.0, Kd=0.1)
+    await game_interface.update_control_type(TwidID.TWID2_ID, ControlType.POSITION_CTRL)
+    await game_interface.update_pid(TwidID.TWID2_ID, Kp=2.5, Ki=0.0, Kd=0.1)
     show_path = True
     
     # Main game loop
@@ -203,13 +205,13 @@ async def run_game(game_interface:TwidSerialInterfaceProtocol):
 
         # Handle player movement
         keys = pygame.key.get_pressed()
-        for idx, ship in enumerate(ships[:1]): # TODO: remove slice
-            left, right = keys[controls[idx][0]], keys[controls[idx][1]]
-            if left or right:
-                if right:
-                    ship.thrust_right() # Accelerate to the right
-                if left:
-                    ship.thrust_left()
+        # for idx, ship in enumerate(ships[:1]): # TODO: remove slice
+        #     left, right = keys[controls[idx][0]], keys[controls[idx][1]]
+        #     if left or right:
+        #         if right:
+        #             ship.thrust_right() # Accelerate to the right
+        #         if left:
+        #             ship.thrust_left()
 
         if keys[pygame.K_t]:
             show_path = not show_path
@@ -223,10 +225,10 @@ async def run_game(game_interface:TwidSerialInterfaceProtocol):
                         pygame.draw.rect(screen, WHITE, crumb)
         
         # Handle pathing
-        for idx, ship in enumerate(ships[:1]): # TODO: remove slice
-            left, right = keys[controls[idx][0]], keys[controls[idx][1]]
-            if not left and not right:
-                ship.pid_control(paths[idx].get_target(9, screen))
+        # for idx, ship in enumerate(ships[:1]): # TODO: remove slice
+        #     left, right = keys[controls[idx][0]], keys[controls[idx][1]]
+        #     if not left and not right:
+        #         ship.pid_control(paths[idx].get_target(9, screen))
         
 
         # Update the display
@@ -234,14 +236,22 @@ async def run_game(game_interface:TwidSerialInterfaceProtocol):
 
         #get the latest telemetry frame
         if not game_interface.frames_t1.empty():
-            offset = -140
-            target_position = paths[1].get_target(9, screen)
+            offset = -40
+            target_position = paths[1].get_target(14, screen)
             await game_interface.game_update_setpoint(TwidID.TWID1_ID, position=target_position)
             latest_frame: TelemetryFrame = game_interface.frames_t1.get_nowait()
             right_ship.x = latest_frame.position + offset
             print(right_ship.x, target_position)
             # right_ship.x = latest_frame.position - right_ship.width//2
             # print(f'frame #: {game_interface.frame_count}, frame: {latest_frame}')
+
+        if not game_interface.frames_t2.empty():
+            offset = -40
+            target_position = paths[0].get_target(14, screen)
+            await game_interface.game_update_setpoint(TwidID.TWID2_ID, position=target_position)
+            latest_frame: TelemetryFrame = game_interface.frames_t2.get_nowait()
+            left_ship.x = latest_frame.position + offset
+            print(left_ship.x, target_position)
 
         # Limit frames per second
         await clock.tick(45)
