@@ -4,10 +4,10 @@ Codebase for UBC's ENPH-459 (Engineering Physics) Capstone Project: **Haptic Sha
 Demonstrating complex human-robot control through a 1 DOF haptic device featuring a BDC motor control system in live feedback with a virtual environment.
 
 Authors: 
-* Gavin Pringle (Hardware)
-* Yousif El-Wishahy (Firmware and Control)
-* Sayeh Oloumi Yazdi (Control)
-* Brian Yan (Virtual Environment)
+* Gavin Pringle
+* Yousif El-Wishahy
+* Sayeh Oloumi Yazdi
+* Brian Yan
 
 ## Important Directories
 - twiddlerino: source code for the ESP32 controller, python serial interface, unit tests and test scripts
