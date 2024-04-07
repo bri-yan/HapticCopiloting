@@ -1,6 +1,8 @@
 import numpy as np
 import pygame
 
+from game_config import *
+
 class Asteroid(pygame.Rect):
     def __init__(self, x, y, width, height, velocity):
         super().__init__(x, y, width, height)
@@ -178,8 +180,8 @@ class EnemyProjectile(pygame.Rect):
         self.y += self.velocity
 
 class Breadcrumb(pygame.Rect):
-    def __init__(self, x, y, width, height, padding):
-        super().__init__(x - padding//2, y - padding//2, width + padding//2, height + padding//2)
+    def __init__(self, x, y, width, height, padding, top_padding):
+        super().__init__(x - padding//2, y - padding//2 - top_padding, width + padding//2, height + padding//2 + top_padding)
         self.collisions = []
     
     def shift(self, dx):
@@ -194,10 +196,10 @@ class Breadcrumb(pygame.Rect):
         return self.y + self.height//2
 
 class Path:
-    def __init__(self, width, height, x, y_bot, y_top, num_breadcrumbs=10, padding=100):
+    def __init__(self, width, height, x, y_bot, y_top, num_breadcrumbs=10, padding=100, top_padding=20):
         self.x = x
         dy = abs(y_top - y_bot) / num_breadcrumbs
-        self.breadcrumbs = [Breadcrumb(x, int(y_bot - i*dy), width, height, padding) for i in range(num_breadcrumbs)]
+        self.breadcrumbs = [Breadcrumb(x, int(y_bot - i*dy), width, height, padding, top_padding) for i in range(num_breadcrumbs)]
         self.cemented = set()
 
     def reset_breadcrumbs(self):
@@ -309,6 +311,11 @@ class Path:
     def get_target(self, idx, screen):
         # pygame.draw.rect(screen, (255, 0, 0), self.breadcrumbs[idx])
         return self.breadcrumbs[idx].center_x
+    
+    def draw(self, screen):
+        for breadcrumb in self.breadcrumbs:
+            crumb = pygame.Rect(breadcrumb.center_x, breadcrumb.center_y, 2, 2)
+            pygame.draw.rect(screen, WHITE, crumb)
 
 class PID:
     def __init__(self, kp=0, ki=0, kd=0):
