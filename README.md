@@ -27,13 +27,13 @@ This is similar to shared control of a robotic system, where the behaviour of a 
 
 ### Twiddlerino System Diagram
 
-<img src="images/system_diagram.png"  width="50%" height="50%">
+<img src="images/system_diagram.png"  width="75%" height="75%">
 
 ### Control Theory
 
 We have implemented shared control between a human and a robot by shifting between two existing controllers: impedance controllers and admittance controllers. Impedance and admittance controllers both simulate virtual spring-mass-damper systems. By shifting between these two controllers, the combined shared controller can act resistively and prevent changes to its trajectory or act compliantly and allow a person to dictate its trajectory.
 
-<img src="images/control_diagram.png"  width="50%" height="50%">
+<img src="images/control_diagram.png"  width="75%" height="75%">
 
 ### Defined Control Modes
 
@@ -70,7 +70,7 @@ Promoted Behaviour:
 
 ### Firmware Architecure
 
-<img src="images/firmware_diagram.png"  width="50%" height="50%">
+<img src="images/firmware_diagram.png"  width="100%" height="100%">
 
 ## Firmware Dev Environment
 
