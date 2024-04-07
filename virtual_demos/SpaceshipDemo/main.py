@@ -104,24 +104,20 @@ async def run_game(game_interface:TwidSerialInterfaceProtocol):
     right_path = Path(right_ship.width, right_ship.height, 3*WIDTH//4 - right_ship.width//2, HEIGHT, -right_ship.height//2, 100)
     paths = [left_path, right_path]
     index = 0
-    xs = [3*WIDTH//4, 3*WIDTH//4 - 50, 3*WIDTH//4 - 100]
-    print(3*WIDTH//4)
-    
-    # asteroids = [
-    #     Asteroid(3*WIDTH//4, HEIGHT//2, asteroid_diameter, asteroid_diameter, asteroid_speed),
-    #     Asteroid(3*WIDTH//4 - 100, HEIGHT//2 - 100, asteroid_diameter, asteroid_diameter, asteroid_speed),
-    # ]
 
-    await game_interface.update_control_type(TwidID.TWID1_ID, ControlType.POSITION_CTRL)
-    await game_interface.update_pid(TwidID.TWID1_ID, Kp=2.5, Ki=0.0, Kd=0.1)
-    await game_interface.update_control_type(TwidID.TWID2_ID, ControlType.POSITION_CTRL)
-    await game_interface.update_pid(TwidID.TWID2_ID, Kp=2.5, Ki=0.0, Kd=0.1)
+    await game_interface.update_control_type(TwidID.TWID1_ID, ControlType.IMPEDANCE_CTRL_SPRING_DAMPING)
+    # await game_interface.update_pid(TwidID.TWID1_ID, Kp=2.5, Ki=0.0, Kd=0.1)
+    await game_interface.update_impedance(TwidID.TWID1_ID, K=2e-2, B=1e-3, J=0.1)
+    await game_interface.update_control_type(TwidID.TWID2_ID, ControlType.IMPEDANCE_CTRL_SPRING_DAMPING)
+    # await game_interface.update_pid(TwidID.TWID2_ID, Kp=2.5, Ki=0.0, Kd=0.1)
+    await game_interface.update_impedance(TwidID.TWID2_ID, K=2e-2, B=1e-3, J=0.1)
+    await game_interface.update_telem_sample_rate(TwidID.TWID1_ID, 25)
+    await game_interface.update_telem_sample_rate(TwidID.TWID2_ID, 25)
     show_path = True
     
     # Main game loop
     while True:
         # Handle game events
-        index = index % len(xs)
         for event in pygame.event.get():
             # Handle game quit
             if event.type == pygame.QUIT or \
@@ -205,13 +201,6 @@ async def run_game(game_interface:TwidSerialInterfaceProtocol):
 
         # Handle player movement
         keys = pygame.key.get_pressed()
-        # for idx, ship in enumerate(ships[:1]): # TODO: remove slice
-        #     left, right = keys[controls[idx][0]], keys[controls[idx][1]]
-        #     if left or right:
-        #         if right:
-        #             ship.thrust_right() # Accelerate to the right
-        #         if left:
-        #             ship.thrust_left()
 
         if keys[pygame.K_t]:
             show_path = not show_path
@@ -223,13 +212,6 @@ async def run_game(game_interface:TwidSerialInterfaceProtocol):
                         pygame.draw.rect(screen, WHITE, crumb)
                     else:
                         pygame.draw.rect(screen, WHITE, crumb)
-        
-        # Handle pathing
-        # for idx, ship in enumerate(ships[:1]): # TODO: remove slice
-        #     left, right = keys[controls[idx][0]], keys[controls[idx][1]]
-        #     if not left and not right:
-        #         ship.pid_control(paths[idx].get_target(9, screen))
-        
 
         # Update the display
         pygame.display.flip()
@@ -239,7 +221,7 @@ async def run_game(game_interface:TwidSerialInterfaceProtocol):
             offset = -40
             target_position = paths[1].get_target(14, screen)
             await game_interface.game_update_setpoint(TwidID.TWID1_ID, position=target_position)
-            latest_frame: TelemetryFrame = game_interface.frames_t1.get_nowait()
+            latest_frame: TelemetryFrame = game_interface.latest_frame_t1
             right_ship.x = latest_frame.position + offset
             print(right_ship.x, target_position)
             # right_ship.x = latest_frame.position - right_ship.width//2
@@ -249,7 +231,7 @@ async def run_game(game_interface:TwidSerialInterfaceProtocol):
             offset = -40
             target_position = paths[0].get_target(14, screen)
             await game_interface.game_update_setpoint(TwidID.TWID2_ID, position=target_position)
-            latest_frame: TelemetryFrame = game_interface.frames_t2.get_nowait()
+            latest_frame: TelemetryFrame = game_interface.latest_frame_t2
             left_ship.x = latest_frame.position + offset
             print(left_ship.x, target_position)
 
