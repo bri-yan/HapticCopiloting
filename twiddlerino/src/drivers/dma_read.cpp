@@ -12,9 +12,9 @@
 #define ADC_OUTPUT_TYPE                 ADC_DIGI_OUTPUT_FORMAT_TYPE1
 #define EXAMPLE_ADC_USE_OUTPUT_TYPE1    1
 #define ADC_CONV_MODE                   ADC_CONV_SINGLE_UNIT_1
-static uint16_t adc1_chan_mask = BIT(7);
+static uint16_t adc1_chan_mask = BIT(6)|BIT(7);
 static uint16_t adc2_chan_mask = 0;
-static adc_channel_t channel[1] = {ADC_CHANNEL_7};
+static adc_channel_t channel[2] = {ADC_CHANNEL_6, ADC_CHANNEL_7};
 static const char *TAG = "ADC DMA";
 
 static bool check_valid_data(const adc_digi_output_data_t *data);
