@@ -35,16 +35,11 @@ typedef enum {
 } ads115_adc_channel_t;
 
 typedef struct {
-    gpio_num_t input_pin;
     adc_channel_t channel;
-    adc_bits_width_t width;
-    adc_atten_t atten; //adc attenuation
-    adc_unit_t adc_unit; //adc unit (1 or 2)
 
+    double last_reading_volts;
     double zero;
     bool is_zeroed;
-
-    uint16_t multisample_num;//how many samples to take for one reading (average)
 
     //adc calibration characteristics here, filled upon init
     esp_adc_cal_characteristics_t adc_cal;

@@ -31,25 +31,13 @@
 
 #include "freertos/task.h"
 
+#include "drivers/dma_read.h"
+
 /******************************************************************************/
 /*                               D E F I N E S                                */
 /******************************************************************************/
 
 #define ADC_DEFAULT_VREF    1100
-
-#define TIMES              256
-#define GET_UNIT(x)        ((x>>3) & 0x1)
-#define ADC_RESULT_BYTE                 2
-#define ADC_CONV_LIMIT_EN               1                       //For ESP32, this should always be set to 1
-#define ADC_OUTPUT_TYPE                 ADC_DIGI_OUTPUT_FORMAT_TYPE1
-#define EXAMPLE_ADC_USE_OUTPUT_TYPE1    1
-#define ADC_CONV_MODE                   ADC_CONV_SINGLE_UNIT_1
-#define ADC_DEFAULT_ATTENUATION ADC_ATTEN_DB_11
-#define ADC_DEFAULT_MULTISAMPLE_NUM 1U
-
-/******************************************************************************/
-/*                P U B L I C  G L O B A L  V A R I A B L E S                 */
-/******************************************************************************/
 
 /******************************************************************************/
 /*            P R I V A T E  F U N C T I O N  P R O T O T Y P E S             */
@@ -67,6 +55,8 @@ void TaskReadCurrentSensor(void *pvParameters);
 
 void adc_calibrate(curr_sens_adc_context_t* handle);
 
+static void continuous_adc_init(uint16_t adc1_chan_mask, uint16_t adc2_chan_mask, adc_channel_t *channel, uint8_t channel_num);
+
 /******************************************************************************/
 /*               P R I V A T E  G L O B A L  V A R I A B L E S                */
 /******************************************************************************/
@@ -80,30 +70,19 @@ static volatile double latest_readings[4] = {0.0};
 static TaskHandle_t xCurrentSensTask;
 static SemaphoreHandle_t xSensMutex;
 
-static curr_sens_adc_context_t curr_sens_1 =   {
-    .input_pin = PIN_CURRENT_SENS_1_ANALOG,
-    .channel = CURRENT_SENS_1_ADC_CHAN,
-    .width = adc_bits_width_t::ADC_WIDTH_BIT_12,
-    .atten = ADC_DEFAULT_ATTENUATION,
-    .adc_unit = ADC_UNIT_1,
-    .zero = 0,
-    .is_zeroed = false,
-    .multisample_num = ADC_DEFAULT_MULTISAMPLE_NUM,
+static curr_sens_adc_context_t curr_sens_1 = {
+  .channel = CURRENT_SENS_1_ADC_CHAN,
+  .last_reading_volts = 0,
+  .zero = 0,
+  .is_zeroed = false,
 };
 
-static curr_sens_adc_context_t curr_sens_2 =   {
-      .input_pin = PIN_CURRENT_SENS_2_ANALOG,
-      .channel = CURRENT_SENS_2_ADC_CHAN,
-      .width = adc_bits_width_t::ADC_WIDTH_BIT_12,
-      .atten = ADC_DEFAULT_ATTENUATION,
-      .adc_unit = ADC_UNIT_1,
-      .zero = 0,
-      .is_zeroed = false,
-      .multisample_num = ADC_DEFAULT_MULTISAMPLE_NUM,
+static curr_sens_adc_context_t curr_sens_2 = {
+  .channel = CURRENT_SENS_2_ADC_CHAN,
+  .last_reading_volts = 0,
+  .zero = 0,
+  .is_zeroed = false,
 };
-//dma configs
-static uint16_t adc1_chan_mask = BIT(curr_sens_1.channel);
-static uint16_t adc2_chan_mask = 0;
 
 /******************************************************************************/
 /*                P U B L I C  G L O B A L  V A R I A B L E S                 */
@@ -118,48 +97,32 @@ curr_sens_adc_context_t *curr_sens_2_handle = &curr_sens_2;
 
 //use internal adc instead of ads115
 void curr_sens_adc_init() {
-  //calibrate each adc
-  adc_calibrate(curr_sens_1_handle);
-  adc_calibrate(curr_sens_2_handle);
+    esp_err_t error_code;
 
-  //init dma
-  adc_digi_init_config_t adc_dma_config = {
-      .max_store_buf_size = 1024,
-      .conv_num_each_intr = TIMES,
-      .adc1_chan_mask = adc1_chan_mask,
-      .adc2_chan_mask = adc2_chan_mask,
-  };
-  ESP_ERROR_CHECK(adc_digi_initialize(&adc_dma_config));
+    dma_config();
 
-  adc_digi_pattern_config_t adc_digi_patterns[2];
-  adc_digi_configuration_t adc_digi_config = {
-      .conv_limit_en = true,
-      .conv_limit_num = 1,
-      .pattern_num = 2,
-      .adc_pattern = adc_digi_patterns,
-      .sample_freq_hz= 10000, //hz
-      .conv_mode = adc_digi_convert_mode_t::ADC_CONV_SINGLE_UNIT_1,
-      .format = adc_digi_output_format_t::ADC_DIGI_OUTPUT_FORMAT_TYPE1
-  };
+    ESP_ERROR_CHECK(adc1_config_width(ADC_WIDTH_BIT_12));
 
-  curr_sens_adc_context_t *adc_ctxs[] = {&curr_sens_1, &curr_sens_2};
-  //fill adc_digi_pattern_config_t for each defined adc
-  for(int i = 0; i < 2; i++) {
-    adc_digi_patterns[i] = {
-      .atten = ADC_ATTEN_11db,
-      .channel = (uint8_t)adc_ctxs[i]->channel,
-      .unit = ADC_UNIT_1,
-      .bit_width = SOC_ADC_DIGI_MAX_BITWIDTH,
-      };
-  }
+    auto cal_type = esp_adc_cal_characterize(ADC_UNIT_1, ADC_ATTEN_11db, ADC_WIDTH_BIT_12, ADC_DEFAULT_VREF, &(curr_sens_1.adc_cal));
+    curr_sens_2.adc_cal = curr_sens_1.adc_cal;
+    if (cal_type == ESP_ADC_CAL_VAL_EFUSE_TP) {
+        ESP_LOGI(TAG, "Characterized using Two Point Value\n");
+    } else if (cal_type == ESP_ADC_CAL_VAL_EFUSE_VREF) {
+        ESP_LOGI(TAG,"Characterized using eFuse Vref\n");
+    } else {
+        ESP_LOGI(TAG,"Characterized using Default Vref of %i mV\n", ADC_DEFAULT_VREF);
+    }
 
-  ESP_ERROR_CHECK(adc_digi_controller_configure(&adc_digi_config));
+    //start dma
+    ESP_ERROR_CHECK(adc_digi_start());
+    ESP_LOGI(TAG,"Stared the adc dma\n");
 
-  adc_digi_start();
+    curr_sens_adc_zero(&curr_sens_1);
+    curr_sens_adc_zero(&curr_sens_2);
 }
 
 void curr_sens_adc_zero(curr_sens_adc_context_t* handle) {
-  ESP_LOGI(TAG, "Zerod esp adc %i on channel %i", handle->adc_unit, handle->channel);
+  ESP_LOGI(TAG, "Zerod esp adc 1 on channel %i", handle->channel);
   handle->zero = curr_sens_adc_get_volts(handle);
   handle->is_zeroed = true;
 }
@@ -170,31 +133,19 @@ double curr_sens_convert_current(curr_sens_adc_context_t* handle, double volts) 
 }
 
 double curr_sens_adc_get_volts(curr_sens_adc_context_t* handle) {
-  ESP_LOGV(TAG, "adc read start time: %lu", micros());
-  uint32_t ret_num = 0;
-  uint8_t result[TIMES] = {0};
+  uint32_t start =  micros();
+  ESP_LOGV(TAG, "adc read start time: %lu", start);
 
   uint32_t reading = 0;
-  uint16_t cnt = 0;
-
-  auto ret = adc_digi_read_bytes(result, TIMES, &ret_num, ADC_MAX_DELAY);
-  if (ret == ESP_OK || ret == ESP_ERR_INVALID_STATE) {
-    for (int i = 0; i < ret_num; i += ADC_RESULT_BYTE) {
-        adc_digi_output_data_t *p = (adc_digi_output_data_t*)&result[i];
-        if (p->type1.channel == handle->channel) {
-          reading+=p->type1.data;
-          cnt++;
-          ESP_LOGV(TAG, "dma: raw reading for channel %i : %i", p->type1.channel, p->type1.data);
-        }
-    }
+  if (dma_read(&reading, handle->channel)) {
+    uint32_t volts_mv = esp_adc_cal_raw_to_voltage(reading, &(handle->adc_cal));
+    double volts = volts_mv*1e-3;
+    ESP_LOGV(TAG, "adc read value: %lf, conversion time: %lu", volts, micros()-start);
+    return volts;
+  } else {
+      ESP_LOGV(TAG, "adc read invalid, conversion time: %lu", micros()-start);
   }
-
-  reading/=cnt;
-  uint32_t volts_mv = esp_adc_cal_raw_to_voltage(reading, &(handle->adc_cal));
-  double volts = volts_mv*1e-3;
-
-  ESP_LOGV(TAG, "adc read value: %lf, conversion time: %lu", volts, micros());
-  return volts;
+  return 0;
 }
 
 void ads115_sens_init() {
@@ -245,26 +196,6 @@ uint16_t ads115_sens_get_sps() {
 /******************************************************************************/
 /*                      P R I V A T E  F U N C T I O N S                      */
 /******************************************************************************/
-
-void adc_calibrate(curr_sens_adc_context_t* handle) {
-    ESP_LOGI(TAG, "calibrating adc %i with attentuation type %i and bit width type %i",handle->adc_unit, handle->atten, SOC_ADC_DIGI_MAX_BITWIDTH);
-  
-    if (handle->adc_unit == ADC_UNIT_1) {
-        adc1_config_width(handle->width);
-        adc1_config_channel_atten((adc1_channel_t)handle->channel, handle->atten);
-    } else {
-        adc2_config_channel_atten((adc2_channel_t)handle->channel, handle->atten);
-    }
-
-    auto cal_type = esp_adc_cal_characterize(handle->adc_unit, handle->atten, handle->width, ADC_DEFAULT_VREF, &(handle->adc_cal));
-    if (cal_type == ESP_ADC_CAL_VAL_EFUSE_TP) {
-        ESP_LOGI(TAG, "Characterized using Two Point Value\n");
-    } else if (cal_type == ESP_ADC_CAL_VAL_EFUSE_VREF) {
-        ESP_LOGI(TAG,"Characterized using eFuse Vref\n");
-    } else {
-        ESP_LOGI(TAG,"Characterized using Default Vref of %i mV\n", ADC_DEFAULT_VREF);
-    }
-}
 
 double get_latest(ads115_adc_channel_t chan) {
   if (xPortInIsrContext() == pdTRUE) {

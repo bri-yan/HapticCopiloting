@@ -33,11 +33,11 @@
 #define PIN_CURRENT_SENS_ADC_SDA  gpio_num_t::GPIO_NUM_21
 #define PIN_CURRENT_SENS_ADC_ALERT gpio_num_t::GPIO_NUM_19
 
-#define PIN_CURRENT_SENS_1_ANALOG  gpio_num_t::GPIO_NUM_36 //this pin goes to channel ADC1_0
-#define CURRENT_SENS_1_ADC_CHAN   adc_channel_t::ADC_CHANNEL_0
+#define PIN_CURRENT_SENS_1_ANALOG  gpio_num_t::GPIO_NUM_34 //this pin goes to channel ADC1_0
+#define CURRENT_SENS_1_ADC_CHAN   adc_channel_t::ADC_CHANNEL_6
 
-#define PIN_CURRENT_SENS_2_ANALOG  gpio_num_t::GPIO_NUM_34 //this pin goes to channel ADC2_5
-#define CURRENT_SENS_2_ADC_CHAN   adc_channel_t::ADC_CHANNEL_6
+#define PIN_CURRENT_SENS_2_ANALOG  gpio_num_t::GPIO_NUM_35 //this pin goes to channel ADC2_5
+#define CURRENT_SENS_2_ADC_CHAN   adc_channel_t::ADC_CHANNEL_7
 
 //motors
 #define PIN_MOTOR1_POWER     gpio_num_t::GPIO_NUM_16  //motor 1 power (pwm) signal
