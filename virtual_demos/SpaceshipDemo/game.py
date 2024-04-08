@@ -52,11 +52,41 @@ class SpaceshipDemo:
         self.right_offset = -40
         self.left_start = None
         self.right_start = None
+        self.prev_left_target = None
+        self.prev_right_target = None
+        self.WIDTH = None
+        self.HEIGHT = None
     
-    def reset_game(self):
-        self.score = 0
+    def reset_game(self, screen, font):
         self.asteroids = deque(maxlen=MAX_ASTEROIDS)
         self.projectiles = deque(maxlen=MAX_PROJECTILES)
+        self.game_over_scene(screen, font)
+        self.score = 0
+    
+    def game_over_scene(self, screen, font):
+        # Display game over message
+        game_over_text = font.render('Game Over', True, (255, 255, 255))
+        screen.blit(game_over_text, (self.WIDTH // 2 - game_over_text.get_width() // 2, self.HEIGHT // 2 - game_over_text.get_height() // 2 - 50))
+    
+        # Display score
+        score_text = font.render(f'Score: {self.score}', True, (255, 255, 255))
+        screen.blit(score_text, (self.WIDTH // 2 - score_text.get_width() // 2, self.HEIGHT // 2 - score_text.get_height() // 2))
+    
+        # Display restart text
+        restart_text = font.render('Press R to Restart', True, (255, 255, 255))
+        screen.blit(restart_text, (self.WIDTH // 2 - restart_text.get_width() // 2, self.HEIGHT // 2 - restart_text.get_height() // 2 + 50))
+
+        # Update the display
+        pygame.display.flip()
+    
+        # Wait for user input to restart or quit
+        while True:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT or (event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE):
+                    pygame.quit()
+                    sys.exit()
+                elif event.type == pygame.KEYDOWN and event.key == pygame.K_r:
+                    return
 
     async def error_based_stiffness(self, twid_id, error, k0, alpha):
         k = k0 + alpha*(error**2)
@@ -101,22 +131,23 @@ class SpaceshipDemo:
 
         # Set up the screen
         screen = pygame.display.set_mode((0,0), pygame.RESIZABLE)
-        WIDTH, HEIGHT = screen.get_size()
+        self.WIDTH, self.HEIGHT = screen.get_size()
         pygame.display.set_caption('Spaceships')
         font = pygame.font.Font(None, 36)  # Change the size as needed
 
         # Create game objects
-        self.left_start, self.right_start = WIDTH//4, 3*WIDTH//4
-        left_ship = PlayerShip(WIDTH//4 - SHIP_WIDTH//2, HEIGHT - 50 - SHIP_HEIGHT//2, SHIP_WIDTH, SHIP_HEIGHT, left_bound=0, right_bound=WIDTH//2)
-        right_ship = PlayerShip(3*WIDTH//4 - SHIP_WIDTH//2, HEIGHT - 50 - SHIP_HEIGHT//2, SHIP_WIDTH, SHIP_HEIGHT, left_bound=WIDTH//2, right_bound=WIDTH)
+        self.left_start, self.right_start = self.WIDTH//4, 3*self.WIDTH//4
+        self.prev_left_target, self.prev_right_target = self.left_start, self.right_start
+        left_ship = PlayerShip(self.WIDTH//4 - SHIP_WIDTH//2, self.HEIGHT - 50 - SHIP_HEIGHT//2, SHIP_WIDTH, SHIP_HEIGHT, left_bound=0, right_bound=self.WIDTH//2)
+        right_ship = PlayerShip(3*self.WIDTH//4 - SHIP_WIDTH//2, self.HEIGHT - 50 - SHIP_HEIGHT//2, SHIP_WIDTH, SHIP_HEIGHT, left_bound=self.WIDTH//2, right_bound=self.WIDTH)
         ships = [left_ship, right_ship]
 
         # Create events
         NEW_ASTEROID_EVENT = pygame.USEREVENT + 1
         # MAX_ASTEROIDS should be on screen at any given time
-        pygame.time.set_timer(NEW_ASTEROID_EVENT, 50*(HEIGHT//ASTEROID_SPEED)//MAX_ASTEROIDS) 
+        pygame.time.set_timer(NEW_ASTEROID_EVENT, 50*(self.HEIGHT//ASTEROID_SPEED)//MAX_ASTEROIDS) 
 
-        enemy_ship = EnemyShip(WIDTH//2 - SHIP_WIDTH//2, 10, SHIP_WIDTH, SHIP_HEIGHT, left_bound=0, right_bound=WIDTH)
+        enemy_ship = EnemyShip(self.WIDTH//2 - SHIP_WIDTH//2, 10, SHIP_WIDTH, SHIP_HEIGHT, left_bound=0, right_bound=self.WIDTH)
         ENEMY_FIRE_EVENT = pygame.USEREVENT + 2
         pygame.time.set_timer(ENEMY_FIRE_EVENT, 1000)
 
@@ -131,13 +162,13 @@ class SpaceshipDemo:
                     move_left = False
                 enemy_ship.thrust_left()
             else:
-                if enemy_ship.center_x > WIDTH - enemy_ship.width:
+                if enemy_ship.center_x > self.WIDTH - enemy_ship.width:
                     move_left = True
                 enemy_ship.thrust_right()
             enemy_ship.move()
                 
-        left_path = Path(left_ship.width, left_ship.height, WIDTH//4 - left_ship.width//2, HEIGHT, -left_ship.height//2, 100)
-        right_path = Path(right_ship.width, right_ship.height, 3*WIDTH//4 - right_ship.width//2, HEIGHT, -right_ship.height//2, 100)
+        left_path = Path(left_ship.width, left_ship.height, self.WIDTH//4 - left_ship.width//2, self.HEIGHT, -left_ship.height//2, 100)
+        right_path = Path(right_ship.width, right_ship.height, 3*self.WIDTH//4 - right_ship.width//2, self.HEIGHT, -right_ship.height//2, 100)
         paths = [left_path, right_path]
 
         # Main game loop
@@ -152,7 +183,7 @@ class SpaceshipDemo:
                 
                 # Handle asteroid generation
                 elif event.type == NEW_ASTEROID_EVENT:
-                    x = random.randint(0 + ASTEROID_DIAMETER//2, WIDTH - ASTEROID_DIAMETER//2)
+                    x = random.randint(0 + ASTEROID_DIAMETER//2, self.WIDTH - ASTEROID_DIAMETER//2)
                     # print(index, xs[index])
                     # x = xs[index]
                     asteroid = Asteroid(x, 0, ASTEROID_DIAMETER, ASTEROID_DIAMETER, ASTEROID_SPEED)
@@ -172,13 +203,13 @@ class SpaceshipDemo:
             for asteroid in self.asteroids:
                 for ship in ships:
                     if asteroid.colliderect(ship):
-                        self.reset_game()
+                        self.reset_game(screen, font)
 
             # Handle projectile collision
             for projectile in self.projectiles:
                 for ship in ships:
                     if projectile.colliderect(ship):
-                        self.reset_game()
+                        self.reset_game(screen, font)
                 
             # Clear the screen
             screen.fill(BLACK)
@@ -192,10 +223,10 @@ class SpaceshipDemo:
             screen.blit(max_score_text, (10, 40))  # Change the position as needed
             
             # Boundaries
-            pygame.draw.line(screen, WHITE, (0, 0), (WIDTH, 0))
-            pygame.draw.line(screen, WHITE, (0, 0), (0, HEIGHT))
-            pygame.draw.line(screen, WHITE, (WIDTH - 1, 0), (WIDTH - 1, HEIGHT))
-            pygame.draw.line(screen, GRAY, (WIDTH//2 - 1, 0), (WIDTH//2 - 1, HEIGHT), 2)
+            pygame.draw.line(screen, WHITE, (0, 0), (self.WIDTH, 0))
+            pygame.draw.line(screen, WHITE, (0, 0), (0, self.HEIGHT))
+            pygame.draw.line(screen, WHITE, (self.WIDTH - 1, 0), (self.WIDTH - 1, self.HEIGHT))
+            pygame.draw.line(screen, GRAY, (self.WIDTH//2 - 1, 0), (self.WIDTH//2 - 1, self.HEIGHT), 2)
 
             # Tether
             if self.enable_tether:
@@ -260,8 +291,9 @@ class SpaceshipDemo:
 
             #get the latest telemetry frame
             if not self.game_interface.frames_t1.empty():
-                target_position = paths[1].get_target(12, screen) - self.right_start
-                await self.game_interface.game_update_setpoint(TwidID.TWID1_ID, position=target_position)
+                target_position = paths[1].get_target(9, screen) - self.right_start
+                await self.game_interface.game_update_setpoint(TwidID.TWID1_ID, position=target_position, velocity=target_position-self.prev_right_target)
+                self.prev_right_target = target_position
                 latest_frame: TelemetryFrame = self.game_interface.latest_frame_t1
                 right_ship.x = latest_frame.position + self.right_offset + self.right_start
                 error = target_position - latest_frame.position
@@ -272,8 +304,9 @@ class SpaceshipDemo:
                 # print(f'frame #: {self.game_interface.frame_count}, frame: {latest_frame}')
 
             if not self.game_interface.frames_t2.empty():
-                target_position = paths[0].get_target(12, screen) - self.left_start
-                await self.game_interface.game_update_setpoint(TwidID.TWID2_ID, position=target_position)
+                target_position = paths[0].get_target(9, screen) - self.left_start
+                await self.game_interface.game_update_setpoint(TwidID.TWID2_ID, position=target_position, velocity=target_position-self.prev_left_target)
+                self.prev_left_target = target_position
                 latest_frame: TelemetryFrame = self.game_interface.latest_frame_t2
                 left_ship.x = latest_frame.position + self.left_offset + self.left_start
                 # await self.error_based_stiffness(TwidID.TWID2_ID, error, 1e-2, 1e-6)
