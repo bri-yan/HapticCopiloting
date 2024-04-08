@@ -282,7 +282,9 @@ static void pid_callback(void *args)
             break;
         case control_type_t::ADMITTANCE_CTRL:
             setpoint_signal = ctrl->telem.torque_external/ctrl->config.impedance.K + ctrl->setpoint.pos;
-            feedback_signal = ctrl->telem.position;
+            feedback_signal = ctrl->telem.torque_net;  // Use torque instead of position for feedback
+
+            output_signal = ctrl->pid_controller.compute(feedback_signal, setpoint_signal);
             break;
         case control_type_t::ADMIT_TO_IMPED:
     //start with 0 for transition factor for admittance control and stop when it hits 1
