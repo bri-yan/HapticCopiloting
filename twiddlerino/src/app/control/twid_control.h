@@ -93,6 +93,13 @@ struct twid_controller_t {
     setpoint_t setpoint; //current setpoint
     uint32_t last_time; //last loop timestamp us
     uint32_t start_time; //start timestamp us
+
+    uint32_t start_admittance_switch;
+    uint32_t start_impedance_switch; 
+
+    uint32_t start_admittance_tf;
+    uint32_t start_impedance_tf;
+
     uint32_t telem_dt; //telemetry code delta time in us
     uint32_t itr; //loop number
     double last_pos; //last encoder position measurement

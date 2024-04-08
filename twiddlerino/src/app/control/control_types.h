@@ -36,6 +36,7 @@ typedef enum {
     IMPEDANCE_CTRL_DAMPING,         //impedance control simplified to damer mode and accounting for friction torque
     IMPEDANCE_CTRL_SPRING_DAMPING,  //impedance control with spring and damping and accounting for friction torque
     IMPEDANCE_CTRL_IGNORE_T_EXT,    //impedance control with spring, damper, intertia and accounting for friction torque
+    ADMITTANCE_CTRL
 } control_type_t;
 
 /**

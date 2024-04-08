@@ -86,6 +86,10 @@ void tcontrol_init(twid_controller_t* ctrl_handle, controller_config_t* config) 
     ctrl_handle->pid_controller = DiscretePID(&ctrl_handle->config);
     ctrl_handle->telem.current_sps = current_sensor_sps();
     ctrl_handle->telem.nframes_sent_queue = 0;
+    ctrl_handle->start_admittance_switch = 0;
+    ctrl_handle->start_impedance_switch = 0;
+    ctrl_handle->start_admittance_tf = 0;
+    ctrl_handle->start_impedance_tf = 1;
 
     const esp_timer_create_args_t timer_args = {
         .callback = pid_callback,
@@ -277,9 +281,50 @@ static void pid_callback(void *args)
             feedback_signal = ctrl->telem.current;
             break;
         case control_type_t::ADMITTANCE_CTRL:
-            feedback_signal = ctrl->telem.torque_external/ctrl->config.impedance.K + ctrl->setpoint.pos;
-            feedback_signal = ctrl->telem.current;
+            setpoint_signal = ctrl->telem.torque_external/ctrl->config.impedance.K + ctrl->setpoint.pos;
+            feedback_signal = ctrl->telem.position;
             break;
+        /* case control_type_t::ADMIT_TO_IMPED:
+            //start with 0 for transition factor for admittance control and stop when it hits 1
+            ctrl_handle->start_admittance_switch = micros(); 
+            double transition_factor = 0;
+
+            double impedance_setpoint_signal = (ctrl->config.motor_J * ctrl->setpoint.accel) + 
+                (ctrl->telem.torque_external * (1 - jjv)) + 
+                (ctrl->config.motor_Kv * ctrl->telem.filtered_velocity) + 
+                ((jjv * ctrl->config.impedance.K) * (ctrl->setpoint.pos - ctrl->telem.position)) +
+                ((jjv * ctrl->config.impedance.B) * (ctrl->setpoint.vel - ctrl->telem.filtered_velocity));
+            impedance_setpoint_signal/= ctrl->config.motor_Ke;
+
+            double admittance_torque_output = (ctrl->telem.torque_external/ctrl->config.impedance.K + ctrl->setpoint.pos)*(this.Kp)
+
+            while ((micros()-ctrl_handle->start_impedance_switch)<=1)
+            {
+                transition_factor = 1/1*((micros()-ctrl_handle->start_admittance_switch))
+                setpoint_signal = admittance_torque_output*(1-ctrl_handle->start_admittance_tf)+(ctrl_handle->start_admittance_tf)*impedance_setpoint_signal
+                feedback_signal = ctrl->telem.current;
+            }
+            break;                
+        case control_type_t::IMPED_TO_ADMIT:
+            //start with 1 for transition factor and stop when it hits 0
+            ctrl_handle->start_impedance_switch = micros();
+            double transition_factor = 1;
+
+            double impedance_setpoint_signal = (ctrl->config.motor_J * ctrl->setpoint.accel) + 
+                (ctrl->telem.torque_external * (1 - jjv)) + 
+                (ctrl->config.motor_Kv * ctrl->telem.filtered_velocity) + 
+                ((jjv * ctrl->config.impedance.K) * (ctrl->setpoint.pos - ctrl->telem.position)) +
+                ((jjv * ctrl->config.impedance.B) * (ctrl->setpoint.vel - ctrl->telem.filtered_velocity));
+            impedance_setpoint_signal/= ctrl->config.motor_Ke;
+
+            double admittance_torque_output = (ctrl->telem.torque_external/ctrl->config.impedance.K + ctrl->setpoint.pos)*(this.Kp)
+
+            while ((micros()-ctrl_handle->start_impedance_switch)<=1) {
+                transition_factor = 1-1/1*((micros()-ctrl_handle->start_impedance_switch))
+                setpoint_signal = admittance_torque_output*(1-ctrl_handle->start_admittance_tf)+(ctrl_handle->start_admittance_tf)*impedance_setpoint_signal
+                feedback_signal = ctrl->telem.current;        
+            }
+            break; */
         default:
             feedback_signal = 0;
             setpoint_signal = 0;
