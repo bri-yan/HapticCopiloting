@@ -28,6 +28,8 @@
 //comms
 #include "app/comms.h"
 
+#include "esp_log.h"
+
 /******************************************************************************/
 /*                               D E F I N E S                                */
 /******************************************************************************/
@@ -67,15 +69,15 @@ static portMUX_TYPE spinlock = portMUX_INITIALIZER_UNLOCKED;
 /******************************************************************************/
 
 void tcontrol_init(twid_controller_t* ctrl_handle, controller_config_t* config) {
-    // if(tcontrol_is_running(ctrl_handle)){
-    //     tcontrol_stop(ctrl_handle);
-    // }
+    if(tcontrol_is_running(ctrl_handle)){
+        tcontrol_stop(ctrl_handle);
+    }
     motor_set_state(ctrl_handle->motor_handle, motor_state_t::MOTOR_LOW);
     encoder_clear_count(ctrl_handle->encoder_handle);
 
     ctrl_handle->mutex = xSemaphoreCreateMutex();
     ctrl_handle->config = *config;
-    ctrl_handle->setpoint = {.pos = 0.0, .vel =0.0, .accel = 0.0};
+    ctrl_handle->setpoint = ctrl_handle->config.init_setpoint;
     ctrl_handle->last_time = 0;
     ctrl_handle->start_time = 0;
     ctrl_handle->telem_dt = 0;
@@ -84,13 +86,13 @@ void tcontrol_init(twid_controller_t* ctrl_handle, controller_config_t* config) 
     ctrl_handle->velocity_filt_ewa = EwmaFilter(ctrl_handle->config.velocity_filter_const, 0.0);
     ctrl_handle->current_filt_ewa = EwmaFilter(ctrl_handle->config.current_filter_const, 0.0);
     ctrl_handle->pid_controller = DiscretePID(&ctrl_handle->config);
-    ctrl_handle->telem.current_sps = current_sensor_sps();
+    // ctrl_handle->telem.current_sps = ads115_sens_get_sps();
     ctrl_handle->telem.nframes_sent_queue = 0;
 
     const esp_timer_create_args_t timer_args = {
         .callback = pid_callback,
         .arg = ctrl_handle,
-        .name = "pid_loop"
+        .name = "pid_loop",
     };
 
     if(ctrl_handle->pid_timer == NULL){
@@ -105,8 +107,8 @@ void tcontrol_start(twid_controller_t* ctrl_handle){
     _ENTER_CRITICAL();
     ESP_LOGD(TAG, "%s starting", ctrl_handle->ctrl_id);
     if(!esp_timer_is_active(ctrl_handle->pid_timer)) {
-        ctrl_handle->last_time = micros();
-        ctrl_handle->start_time = micros();
+        ctrl_handle->last_time = esp_timer_get_time();
+        ctrl_handle->start_time = esp_timer_get_time();
         ESP_ERROR_CHECK(esp_timer_start_periodic(ctrl_handle->pid_timer, ctrl_handle->config.sample_time_us));
         ESP_LOGD(TAG, "Started pid callback for controller %s with timer with period %lu", ctrl_handle->ctrl_id, ctrl_handle->config.sample_time_us);
     }
@@ -174,16 +176,16 @@ static void pid_callback(void *args)
     ctrl->telem.ctrl_id = ctrl->ctrl_id;
 
     //sensor read segment 
-    ctrl->telem.timestamp_ms = (micros() - ctrl->start_time)/1000.0;
-    ctrl->telem.loop_dt = micros() - ctrl->last_time;
+    ctrl->telem.timestamp_ms = (esp_timer_get_time() - ctrl->start_time)/1000.0;
+    ctrl->telem.loop_dt = esp_timer_get_time() - ctrl->last_time;
     ctrl->last_time += ctrl->telem.loop_dt;
 
-    ctrl->telem.read_dt = micros();
+    ctrl->telem.read_dt = esp_timer_get_time();
     ctrl->telem.position = encoder_get_angle(ctrl->encoder_handle);
 
     //read and filter current
-    ctrl->telem.current_sens_adc_volts = current_sensor_get_volts(ctrl->current_sens_chan);
-    ctrl->telem.current = current_sensor_get_current(ctrl->current_sens_chan);
+    current_sensor_get_volts(ctrl->curr_sens_handle, &ctrl->telem.current_sens_adc_volts);
+    current_sensor_volts_to_amps(ctrl->telem.current_sens_adc_volts, ctrl->curr_sens_handle->zero_volts, &ctrl->telem.current);
     ctrl->telem.filtered_current = ctrl->current_filt_ewa(ctrl->telem.current);
 
     //read and filter velocity
@@ -203,10 +205,10 @@ static void pid_callback(void *args)
     }
     ctrl->telem.torque_external = ctrl->telem.torque_net - ctrl->telem.torque_control;
 
-    ctrl->telem.read_dt = micros() - ctrl->telem.read_dt;
+    ctrl->telem.read_dt = esp_timer_get_time() - ctrl->telem.read_dt;
 
     //control segment
-    ctrl->telem.control_dt = micros();
+    ctrl->telem.control_dt = esp_timer_get_time();
     ctrl->telem.pid_success_flag = 1;
     auto feedback_signal = 0.0;
     auto output_signal = 0.0;
@@ -296,11 +298,11 @@ static void pid_callback(void *args)
     ctrl->telem.pwm_duty_cycle = (double)motor_get_duty_cycle(ctrl->motor_handle);
 
     ctrl->telem.pwm_frequency = motor_get_frequency(ctrl->motor_handle);
-    ctrl->telem.control_dt = micros() - ctrl->telem.control_dt;
+    ctrl->telem.control_dt = esp_timer_get_time() - ctrl->telem.control_dt;
 
     //fill and return telemetry structure
     ctrl->telem.telemetry_dt = ctrl->telem_dt; //get last telemetry delta time
-    ctrl->telem_dt = micros();
+    ctrl->telem_dt = esp_timer_get_time();
     ctrl->telem.setpoint = ctrl->setpoint;
     ctrl->telem.Kp = ctrl->config.Kp;
     ctrl->telem.Ki = ctrl->config.Ki;
@@ -315,7 +317,7 @@ static void pid_callback(void *args)
         xQueueSendFromISR(ctrl->telem_queue_handle, &ctrl->telem, &xHigherPriorityTaskWoken);
     }
     ctrl->itr++;
-    ctrl->telem_dt = micros() - ctrl->telem_dt;
+    ctrl->telem_dt = esp_timer_get_time() - ctrl->telem_dt;
 }
 
 /******************************************************************************/

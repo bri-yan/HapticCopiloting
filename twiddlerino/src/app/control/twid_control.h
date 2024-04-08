@@ -13,15 +13,21 @@
 
 #include "app/control/control_types.h"
 
-#include "app/filter/ewma_filter.h"
-
 #include "app/twid32_config.h"
+
+#include "app/filter/ewma_filter.h"
 
 #include "drivers/encoder.h"
 #include "drivers/motor.h"
 #include "drivers/current_sensor.h"
 
-#include "Arduino.h"
+#include "esp_timer.h"
+
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "freertos/queue.h"
+#include "freertos/semphr.h"
+
 
 /******************************************************************************/
 /*                                 C L A S S                                  */
@@ -75,7 +81,7 @@ struct twid_controller_t {
     //hardware handles
     motor_driver_context_t* motor_handle;
     encoder_context_t* encoder_handle;
-    curr_sens_adc_channel_t current_sens_chan;
+    current_sens_contex_t* curr_sens_handle;
 
     //filters
     //default is no filtering

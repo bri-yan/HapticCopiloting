@@ -1,9 +1,9 @@
 /**
  * @file current_sensor.h
- * @brief Current sensing driver, using adc
- * @author Gavin Pringle and Yousif El-Wishahy (ywishahy@student.ubc.ca)
+ * @brief Current sensing driver, using esp32 adc DMA
+ * @author Yousif El-Wishahy (ywishahy@student.ubc.ca)
  * 
- *   https://www.ti.com/lit/ds/symlink/ads1115.pdf?ts=1711845972450&ref_url=https%253A%252F%252Fwww.google.com%252F
+ * https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/peripherals/adc_continuous.html
  * 
  */
 
@@ -14,153 +14,109 @@
 //library header
 #include "drivers/current_sensor.h"
 
-#include "app/twid32_pin_defs.h"
-#include "app/twid32_config.h"
-
-//ads drivers
-#include "Adafruit_ADS1X15.h"
-#include "SPI.h"
-#include "esp32-hal-i2c.h"
-#include "esp32-hal-i2c-slave.h"
-
-//hardware drivers
-#include "drivers/encoder.h"
-#include "drivers/motor.h"
-#include "drivers/current_sensor.h"
-
-#include "freertos/task.h"
+#include "esp_log.h"
 
 /******************************************************************************/
 /*                               D E F I N E S                                */
 /******************************************************************************/
 
+#define CURRENT_SENS_VOLTS_PER_AMP 0.136 //mV/Amp sensitivity on the hall effect sensor
+
+/******************************************************************************/
+/*                P U B L I C  G L O B A L  V A R I A B L E S                 */
+/******************************************************************************/
+
+current_sens_contex_t current_sens_1_handle {
+    .channel = ADC_CHANNEL_6,
+    .last_raw = 0,
+    .is_zeroed = false,
+    .zero_volts = 0.0,
+    .last_volts = 0.0,
+    .last_amps = 0.0,
+};
+
+current_sens_contex_t current_sens_2_handle {
+    .channel = ADC_CHANNEL_7,
+    .last_raw = 0,
+    .is_zeroed = false,
+    .zero_volts = 0.0,
+    .last_volts = 0.0,
+    .last_amps = 0.0,
+};
+
 /******************************************************************************/
 /*            P R I V A T E  F U N C T I O N  P R O T O T Y P E S             */
 /******************************************************************************/
 
-//read adc voltage
-//blocking
-double ads_read(curr_sens_adc_channel_t);
-
-//get latest voltage reading non-blocking
-double get_latest(curr_sens_adc_channel_t);
-
-//continiously updates latest readings
-void TaskReadCurrentSensor(void *pvParameters);
+static void zero(current_sens_contex_t*);
 
 /******************************************************************************/
 /*               P R I V A T E  G L O B A L  V A R I A B L E S                */
 /******************************************************************************/
 static const char* TAG = "current_sensor";
 
-//motor pwm timer channel
-static Adafruit_ADS1115 ads;
-
-static double zeros[4] = {0.0};
-static bool zeroed_on_startup[4] = {false};
-static volatile double latest_readings[4] = {0.0};
-
-//freertos current sensor read task
-static TaskHandle_t xCurrentSensTask;
-static SemaphoreHandle_t xSensMutex;
-
 /******************************************************************************/
 /*                       P U B L I C  F U N C T I O N S                       */
 /******************************************************************************/
 
+void current_sensor_init_all() {
+    ESP_LOGI(TAG, "current sensor init");
+    twid_adc_init();
+    zero(&current_sens_1_handle);
+    zero(&current_sens_2_handle);
+}
 
-void current_sensor_init() {
-  xSensMutex = xSemaphoreCreateMutex();
-
-  //note ads.begin() implicity uses i2c address 72U
-  //                and default scl/sda i2c pins gpio 22 (scl) and gpio21 (sda)
-
-  if (!ads.begin()) {
-    if (Serial && Serial.availableForWrite()) {
-      ESP_LOGW(TAG, "Current Sensor: Failed to init ADS115.\n");
+bool current_sensor_get_volts(current_sens_contex_t* ctx, double* volts) {
+    bool status = false;
+    int32_t raw;
+    status = twid_adc_get_raw(ctx->channel, &raw);
+    if(!status) {
+        ESP_LOGI(TAG, "failed get raw reading on adc cahnn %i", ctx->channel);
+        return false;
     }
-  }
 
-  //set i2c clock to fast mode
-  i2cSetClock(0, 400000U);
-  uint32_t freq = 0;
-  i2cGetClock(0, &freq);
-  ESP_LOGI(TAG, "i2c frequency: %lu\n", freq);
+    int32_t mv;
+    twid_adc_raw_to_millivolts(raw, &mv);
+    *volts = 1.0e-3 * mv;
 
-  ads.setDataRate(RATE_ADS1115_860SPS);
-  ads.setGain(adsGain_t::GAIN_TWOTHIRDS);
-
-  xTaskCreatePinnedToCore(
-    TaskReadCurrentSensor
-    ,  "Current_Sensor_Read_Task"
-    ,  8192
-    ,  NULL
-    ,  TASK_PRIORITY_SENSOR
-    ,  &xCurrentSensTask
-    ,  CORE_SENSOR_TASK
-  );
+    ctx->last_volts = *volts;
+    ctx->last_raw = raw;
+    return true;
 }
 
-double current_sensor_get_volts(curr_sens_adc_channel_t chan) {
-  return (get_latest(chan) - zeros[chan]);
+bool current_sensor_get_amps(current_sens_contex_t* ctx, double* amps) {
+    double volts;
+    if (!current_sensor_get_volts(ctx, &volts)){
+        return false;
+    }
+
+    current_sensor_volts_to_amps(volts, ctx->zero_volts, amps);
+    ctx->last_amps = *amps;
+    return true;
 }
 
-double current_sensor_get_current(curr_sens_adc_channel_t chan) {
-  return (get_latest(chan) - zeros[chan])/CURRENT_SENS_VOLTS_PER_AMP;
-}
-
-uint16_t current_sensor_sps() {
-  return ads.getDataRate();
+void current_sensor_volts_to_amps(double volts, double zero, double* amps) {
+    *amps = (volts - zero)/CURRENT_SENS_VOLTS_PER_AMP;
 }
 
 /******************************************************************************/
 /*                      P R I V A T E  F U N C T I O N S                      */
 /******************************************************************************/
 
-double get_latest(curr_sens_adc_channel_t chan) {
-  if (xPortInIsrContext() == pdTRUE) {
-    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-    xSemaphoreTakeFromISR(xSensMutex, &xHigherPriorityTaskWoken);
-    auto sens = latest_readings[chan];
-    xSemaphoreGiveFromISR(xSensMutex, &xHigherPriorityTaskWoken);
-    return sens;
-  } else {
-    xSemaphoreTake(xSensMutex, portMAX_DELAY);
-    auto sens = latest_readings[chan];
-    xSemaphoreGive(xSensMutex);
-    return sens;
-  }
-}
+static void zero(current_sens_contex_t* ctx) {
+    bool status = false;
+    status = twid_adc_get_raw(ctx->channel, &ctx->last_raw);
+    if(!status) {
+        ESP_LOGI(TAG, "failed get raw reading on adc cahnn %i", ctx->channel);
+        return;
+    }
+    int32_t mv;
+    twid_adc_raw_to_millivolts(ctx->last_raw, &mv);
+    ctx->zero_volts = mv * 1.0e-3;
+    ctx->is_zeroed = true;
 
-void TaskReadCurrentSensor(void *pvParameters) {
-  ESP_LOGI(TAG, "current sensor read task started");
-  for(;;) 
-  {
-    uint32_t start_time = micros();
-    auto chan1 = ads_read(curr_sens_adc_channel_t::CURRENT_SENSOR_1);
-    ESP_LOGD(TAG, "read channel 1 dt: %lu us",micros()-start_time);
-    vTaskDelay( 0 );
-    start_time = micros();
-    auto chan2 = ads_read(curr_sens_adc_channel_t::CURRENT_SENSOR_2);
-    ESP_LOGD(TAG, "read channel 1 dt: %lu us",micros()-start_time);
+    ctx->last_volts = ctx->zero_volts;
+    current_sensor_volts_to_amps(ctx->last_volts, ctx->zero_volts, &ctx->last_amps);
 
-    xSemaphoreTake(xSensMutex, portMAX_DELAY);
-    latest_readings[curr_sens_adc_channel_t::CURRENT_SENSOR_1] = chan1;
-    latest_readings[curr_sens_adc_channel_t::CURRENT_SENSOR_2] = chan2;
-    xSemaphoreGive(xSensMutex);
-  
-    vTaskDelay( 1 );
-  }
-}
-
-double ads_read(curr_sens_adc_channel_t chan){
-  ESP_LOGV(TAG, "current sensor adc read channel %i", chan);
-  //not sure how long this takes
-  auto sens = ads.computeVolts(ads.readADC_SingleEnded(MUX_BY_CHANNEL[chan]));
-  if (!zeroed_on_startup[chan]) {
-    ESP_LOGI(TAG, "zeroed current sens adc reading on channel %i", chan);
-    zeros[chan] = sens;
-    zeroed_on_startup[chan] = true;
-  }
-  return sens;
+    ESP_LOGI(TAG, "zeroed current sensor on adc chan %i", ctx->channel);
 }

@@ -14,8 +14,9 @@
 //for int types
 #include <stdint.h>
 
+
 //for gpio types
-#include "esp32-hal-gpio.h"
+#include "driver/gpio.h"
 
 //pcnt
 #include "driver/pcnt.h"

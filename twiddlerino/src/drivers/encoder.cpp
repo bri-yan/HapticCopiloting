@@ -2,6 +2,9 @@
  * @file Encoder.cpp
  * @brief Encoder driver for esp32 using pcnt peripherial to decode quaderature signals
  * @author Yousif El-Wishahy (ywishahy@student.ubc.ca)
+ * 
+ * https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/peripherals/pcnt.html
+ * https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/peripherals/gpio.html
  */
 
 /******************************************************************************/
@@ -11,14 +14,12 @@
 //encoder lib header
 #include "drivers/encoder.h"
 
-#include <stdlib.h>
-#include <string.h>
-#include <sys/cdefs.h>
-#include "esp_compiler.h"
+
 #include "esp_log.h"
 #include "driver/pcnt.h"
 #include "sys/lock.h"
 #include "hal/pcnt_hal.h"
+#include "freertos/portmacro.h"
 
 /******************************************************************************/
 /*                               D E F I N E S                                */
@@ -71,9 +72,15 @@ void encoder_init(encoder_context_t* encoder_ctx) {
     //init value
     encoder_ctx->encoder_accu_cnt = 0;
 
-    //pins
-    pinMode(encoder_ctx->quad_pin_a, INPUT_PULLUP);
-    pinMode(encoder_ctx->quad_pin_b, INPUT_PULLUP);
+    //configure quaderature pins as input
+    gpio_config_t io_conf  = {
+      .pin_bit_mask = BIT64(encoder_ctx->quad_pin_a)|BIT64(encoder_ctx->quad_pin_a),
+      .mode = gpio_mode_t::GPIO_MODE_INPUT,
+      .pull_up_en = (gpio_pullup_t) 0,
+      .pull_down_en = (gpio_pulldown_t)0,
+      .intr_type = gpio_int_type_t::GPIO_INTR_DISABLE,
+    };
+    ESP_ERROR_CHECK(gpio_config(&io_conf));
     ESP_LOGI(TAG, "Quaderature GPIO pins initialized (QuadA: gpio %i, QuadB: gpio %i)",encoder_ctx->quad_pin_a,encoder_ctx->quad_pin_b);
 
     //config channel 0 counter

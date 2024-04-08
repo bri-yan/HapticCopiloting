@@ -17,7 +17,7 @@
 //for int types
 #include <stdint.h>
 
-#include "Arduino.h"
+#include <string>
 
 /******************************************************************************/
 /*                               D E F I N E S                                */
@@ -77,25 +77,13 @@ typedef struct {
  *        Returns cmd_type_t > 0 if the command was intereted and executed successfully
  *        Otherwise cmd_type_t < 0
  */
-cmd_type_t handle_command(String *);
-
-/**
- * @brief read controller config strings, will return false if string is invalid/not recognized, 
-            otherwise will fill config struct
- */
-cmd_type_t decode_config_cmd(String *, controller_config_t *);
+cmd_type_t handle_command(const char* buff, size_t size);
 
 /**
  * @brief Send ack message for cmd_type
  * 
  */
 void ack_cmd(cmd_type_t);
-
-/**
- * @brief Publish comma seperated telemetry string (utf-8) over serial
- * 
- */
-uint32_t publish_telemetry(telemetry_t *);
 
 /**
  * @brief Publish (utf-8) string encoded to be read by serial studio telemetry app
@@ -108,12 +96,6 @@ uint32_t publish_telemetry_serial_studio(telemetry_t *telem);
  * 
  */
 uint32_t print_controller_cfg(twid_controller_t*);
-
-// read string until terminator
-String read_string_until(char terminator);
-
-// extract doubles from string
-void extract_doubles(String *, double*, uint16_t);
 
 void reset_sent_count();
 

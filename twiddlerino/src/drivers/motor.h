@@ -15,11 +15,17 @@
 //for int types
 #include <stdint.h>
 
-#include "Arduino.h"
+#include "hal/gpio_types.h"
+
+#include "driver/ledc.h"
+
 
 /******************************************************************************/
 /*                               D E F I N E S                                */
 /******************************************************************************/
+
+#define MOTOR_DUTY_CYCLE_RES_BITS   LEDC_TIMER_10_BIT
+#define MOTOR_DUTY_CYCLE_RES        (1024) //10 BIT
 
 /******************************************************************************/
 /*                              T Y P E D E F S                               */
@@ -39,7 +45,7 @@ typedef enum {
 typedef struct {
     gpio_num_t power_pin;
     gpio_num_t dir_pin;
-    uint8_t pwm_channel;
+    ledc_channel_t pwm_channel;
     motor_state_t state;
     const char* handle_name;
 } motor_driver_context_t;

@@ -5,7 +5,7 @@
  */
 
 #ifndef TWIDDLERINO_MAIN_H_
-#define TWIDDLERINO_H_
+#define TWIDDLERINO_MAIN_H_
 
 /******************************************************************************/
 /*                              I N C L U D E S                               */
@@ -13,8 +13,6 @@
 
 //for int types
 #include <stdint.h>
-
-#include "Arduino.h"
 
 /******************************************************************************/
 /*                               D E F I N E S                                */
@@ -35,5 +33,5 @@ void enable_telemetry_publisher();
 
 void disable_telemetry_publisher();
 
-#endif //TWIDDLERINO_H_
+#endif //TWIDDLERINO_MAIN_H_
 

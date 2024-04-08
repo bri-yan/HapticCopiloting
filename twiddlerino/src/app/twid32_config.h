@@ -12,7 +12,7 @@
 /*                              I N C L U D E S                               */
 /******************************************************************************/
 //need to import controller config struct definition
-#include "app/control/control_types.h"
+// #include "app/control/control_types.h"
 
 #include "twid32_pin_defs.h"
 
@@ -28,7 +28,7 @@
 
 //command and telemetry config
 #define ENABLE_DEBUG_TELEMETRY_ON_INIT true
-#define TELEMETRY_QUEUE_SIZE 250U
+#define TELEMETRY_QUEUE_SIZE 500U
 #define TELEMETRY_DEFAULT_SAMPLE_RATE 20U //telemetry sample rate in (control loops)/sample
 #define FREE_RTOS_TELEM_SAMPLE_RATE 5000U //MS
 
@@ -43,15 +43,9 @@
 #define UART_BAUD_RATE 1000000U
 
 //motor
-#define MOTOR_MAX_SPEED_RPM 100000
-#define MOTOR_PWM_FREQ 20000U
-#define MOTOR_DUTY_CYCLE_RES_BITS 10U
-#define MOTOR_DUTY_CYCLE_RES 1024
 #define MOTOR1_PWM_CHAN_DEFAULT 0
 #define MOTOR2_PWM_CHAN_DEFAULT 2
 
-//current sensor
-#define CURRENT_SENS_VOLTS_PER_AMP 0.136 //mV/Amp sensitivity on the hall effect sensor
 
 //macro for struct (partial) init to fill out default controller parameters
 //CHANGE CONTROLLER DEFAULT CONFIG HERE!!!!
@@ -77,9 +71,6 @@
 #define CORE_SERIAL_WRITE_TASK 0U
 
 #define TASK_PRIORITY_CONTROL (configMAX_PRIORITIES - 1)
-#define TASK_PRIORITY_TELEMETRY (configMAX_PRIORITIES - 1)
-#define TASK_PRIORITY_GAME_SEND (configMAX_PRIORITIES - 1)
-#define TASK_PRIORITY_COMMAND (configMAX_PRIORITIES)
-#define TASK_PRIORITY_SENSOR (configMAX_PRIORITIES)
+#define TASK_PRIORITY_TELEMETRY (configMAX_PRIORITIES - 2)
 
 #endif // TWID32_CONFIG_H_

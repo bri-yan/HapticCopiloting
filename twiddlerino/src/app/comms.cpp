@@ -13,10 +13,7 @@
 #include "app/comms.h"
 
 //comms types for telem and command
-#include "app/control/twid_control.h"
-
-#include "Arduino.h"
-
+// #include "app/control/twid_control.h"
 #include "twiddlerino_main.h"
 
 //hardware drivers
@@ -24,8 +21,13 @@
 #include "drivers/motor.h"
 #include "drivers/current_sensor.h"
 
+#include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
 
+#include "drivers/twid_serial.h"
+#include "esp_log.h"
 
+#include <string>
 
 /******************************************************************************/
 /*                               D E F I N E S                                */
@@ -45,11 +47,7 @@
 /*            P R I V A T E  F U N C T I O N  P R O T O T Y P E S             */
 /******************************************************************************/
 
-static char timed_read();
-
-static void insert_setpoint_buffer(cmd_type_t cmd, String * str, setpoint_t* buffer, SemaphoreHandle_t* mutex, uint16_t num_values);
-
-uint16_t extract_cs_strings(String * str, String *out);
+uint16_t extract_cs_strings(std::string* str, std::string *out);
 
 /******************************************************************************/
 /*               P R I V A T E  G L O B A L  V A R I A B L E S                */
@@ -59,14 +57,16 @@ static const char* TAG = "comms";
 static uint32_t nframes_sent_serial = 0;
 
 //array of char arrays
-static String elements[MAX_ELEMENTS];
+static std::string elements[MAX_ELEMENTS];
 
 /******************************************************************************/
 /*                       P U B L I C  F U N C T I O N S                       */
 /******************************************************************************/
 
-cmd_type_t handle_command(String *str) {
-    ESP_LOGD(TAG, "Recived cmd string %s", *str);
+cmd_type_t handle_command(const char* buff, size_t size) {
+    std::string buff_string(buff, size);
+    auto str = &buff_string;
+    ESP_LOGD(TAG, "Recived cmd string %s", str->c_str());
 
     auto num_elements = extract_cs_strings(str, elements);
     ESP_LOGD(TAG, "Extracted %i elements from command string", num_elements);
@@ -90,7 +90,7 @@ cmd_type_t handle_command(String *str) {
     auto cfg = ctrl->config;
 
     if(*str == "hello" || *str == "ping"){
-        Serial.printf("esp_alive_signal\n");
+        twid_uart_write("esp_alive_signal\n");
     } else if(*str == "STOP" || *str == "stop"){
         motor_fast_stop(ctrl->motor_handle);
         tcontrol_stop(ctrl);
@@ -112,19 +112,19 @@ cmd_type_t handle_command(String *str) {
     } else if(*str == "telemetry_disable") {
         disable_telemetry_publisher();
         return cmd_type_t::TELEM_DISABLE;
-    } else if(str->substring(0,7) == "set_pid" && num_elements >= 3){
-        cfg.Kp = elements[i0].toDouble();
-        cfg.Ki = elements[i0+1].toDouble();
-        cfg.Kd = elements[i0+2].toDouble();
+    } else if(str->substr(0,7) == "set_pid" && num_elements >= 3){
+        cfg.Kp = atof(elements[i0].c_str());
+        cfg.Ki = atof(elements[i0+1].c_str());
+        cfg.Kd = atof(elements[i0+2].c_str());
         tcontrol_update_cfg(ctrl, &cfg);
         return cmd_type_t::SET_PID;
-    } else if(str->substring(0,13) == "set_impedance" && num_elements >= 3) {
-        cfg.impedance.K = elements[i0].toDouble();
-        cfg.impedance.B = elements[i0+1].toDouble();
-        cfg.impedance.J = elements[i0+2].toDouble();
+    } else if(str->substr(0,13) == "set_impedance" && num_elements >= 3) {
+        cfg.impedance.K = atof(elements[i0].c_str());
+        cfg.impedance.B = atof(elements[i0+1].c_str());
+        cfg.impedance.J = atof(elements[i0+2].c_str());
         tcontrol_update_cfg(ctrl, &cfg);
         return cmd_type_t::SET_IMPEDANCE;
-    } else if(str->substring(0,8) == "set_mode" && num_elements >= 1) {
+    } else if(str->substr(0,8) == "set_mode" && num_elements >= 1) {
         auto name = elements[i0];
 
         control_type_t mode = cfg.control_type;
@@ -155,29 +155,29 @@ cmd_type_t handle_command(String *str) {
         cfg.control_type = mode;
         tcontrol_update_cfg(ctrl, &cfg);
         return cmd_type_t::SET_MODE;
-    } else if(str->substring(0,19) == "set_telemsamplerate" && num_elements >= 1) {
-        ESP_LOGD(TAG, "%s", *str);
-        auto val = elements[i0].toInt();
+    } else if(str->substr(0,19) == "set_telemsamplerate" && num_elements >= 1) {
+        ESP_LOGD(TAG, "%s", str->c_str());
+        auto val = atoi(elements[i0].c_str());
         if (val >= 1) {
             cfg.telemetry_sample_rate = (uint32_t)val;
             tcontrol_update_cfg(ctrl, &cfg);
             return cmd_type_t::SET_TELEMSAMPLERATE;
         }
-    } else if(str->substring(0,12) == "set_setpoint" && num_elements >= 4){
+    } else if(str->substr(0,12) == "set_setpoint" && num_elements >= 4){
         setpoint_t new_sp;
-        new_sp.pos = elements[i0].toDouble();
-        new_sp.vel = elements[i0+1].toDouble();
-        new_sp.accel = elements[i0+2].toDouble();
-        new_sp.torque = elements[i0+3].toDouble();
+        new_sp.pos = atof(elements[i0].c_str());
+        new_sp.vel = atof(elements[i0+1].c_str());
+        new_sp.accel = atof(elements[i0+2].c_str());
+        new_sp.torque = atof(elements[i0+3].c_str());
         tcontrol_update_setpoint(ctrl, &new_sp);
         return cmd_type_t::SET_SETPOINT;
-    } else if(str->substring(0,13) == "set_dutycycle" && num_elements >= 1) {
-        int32_t new_dc = elements[i0].toInt();
+    } else if(str->substr(0,13) == "set_dutycycle" && num_elements >= 1) {
+        int32_t new_dc = atoi(elements[i0].c_str());
         motor_set_pwm(ctrl->motor_handle, new_dc);
         ESP_LOGD(TAG, "Set pwm duty cycle to %li with frequency %lu.\nMotor State: %i.\n",
         motor_get_duty_cycle(ctrl->motor_handle), motor_get_frequency(ctrl->motor_handle), motor_get_state(ctrl->motor_handle));
         return cmd_type_t::SET_DUTYCYCLE;
-    } else if(str->substring(0,17) == "set_multisetpoint") {
+    } else if(str->substr(0,17) == "set_multisetpoint") {
         return cmd_type_t::NA_CMD;
         // int16_t i0 = str->indexOf(',',0);
         // i0+=1;
@@ -210,19 +210,9 @@ cmd_type_t handle_command(String *str) {
     return cmd_type_t::NA_CMD;
 }
 
-uint32_t publish_telemetry(telemetry_t *telem) {
-    uint32_t size = 0;
-    telemetry_t t = *telem;
-    if(Serial) {
-        size = Serial.printf("telem,time_ms:%lu,loop_dt:%lu,control_dt:%lu,read_dt:%lu,pid_success_flag:%i,position:%lf,pwm_duty_cycle:%lf,set_point:%f,velocity:%lf,current:%lf,torque_external:%lf,\n", 
-            t.timestamp_ms, t.loop_dt, t.control_dt, t.read_dt, t.pid_success_flag, t.position, t.pwm_duty_cycle, t.setpoint.pos, t.velocity, t.current, t.torque_external);
-    }
-    return size;
-}
-
 void ack_cmd(cmd_type_t cmd) {
     ESP_LOGD(TAG, "acknowledging command %i", cmd);
-    Serial.printf("/*TWIDDLERINO_ACK,%i*/\n",(int16_t)cmd);
+    twid_uart_write("/*TWIDDLERINO_ACK,%i*/\n",(int16_t)cmd);
 }
 
 //Serial studio frames are read as "/*TITLE,%s,%s,%s,...,%s*/"
@@ -232,91 +222,25 @@ void ack_cmd(cmd_type_t cmd) {
 uint32_t publish_telemetry_serial_studio(telemetry_t *telem) {
     uint32_t size = 0;
     telemetry_t t = *telem;
-    if(Serial) {
         nframes_sent_serial+=1;
-        size = Serial.printf("/**TWIDDLERINO_TELEMETRY,%lu,%lu,%lu,%lu,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lu,%lu,%i,%lf,%s**/\n", 
+        size = twid_uart_write("/**TWIDDLERINO_TELEMETRY,%lu,%lu,%lu,%lu,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lu,%lu,%i,%lf,%s**/\n", 
             t.timestamp_ms, t.loop_dt, t.control_dt, t.read_dt, 
             t.pwm_duty_cycle, t.pwm_frequency, 
             t.position, t.velocity, t.filtered_velocity, t.current, t.filtered_current, t.torque_external, t.torque_control, t.torque_net,
             t.setpoint.pos, t.setpoint.vel, t.setpoint.accel, t.setpoint.torque,
             t.Kp, t.Ki, t.Kd, t.impedance.K, t.impedance.B, t.impedance.J, t.nframes_sent_queue, 
             nframes_sent_serial, (int16_t)t.control_type, t.current_sens_adc_volts, t.ctrl_id);
-    }
     return size;
 }
 
 uint32_t print_controller_cfg(twid_controller_t* ctrl_handle) {
     uint32_t size = 0;
 
-    if(Serial) {
-        controller_config_t cfg = ctrl_handle->config;
-        size = Serial.printf("################\n%s CONTROLLER CONFIGURATION:\n*control_type:%i\t*sample_time:%lu us\n*Kp:%lf\t*Ki:%lf\t*Kd:%lf\n*stiffness:%lf\t*damping:%lf\t*intertia:%lf\n################\n",
-        ctrl_handle->ctrl_id, cfg.control_type, cfg.sample_time_us, cfg.Kp, cfg.Ki, cfg.Kd, cfg.impedance.K, cfg.impedance.B, cfg.impedance.J);
-    }
+    controller_config_t cfg = ctrl_handle->config;
+    size = twid_uart_write("################\n%s CONTROLLER CONFIGURATION:\n*control_type:%i\t*sample_time:%lu us\n*Kp:%lf\t*Ki:%lf\t*Kd:%lf\n*stiffness:%lf\t*damping:%lf\t*intertia:%lf\n################\n",
+    ctrl_handle->ctrl_id, cfg.control_type, cfg.sample_time_us, cfg.Kp, cfg.Ki, cfg.Kd, cfg.impedance.K, cfg.impedance.B, cfg.impedance.J);
 
     return size;
-}
-
-String read_string_until(char terminator) {
-    String ret;
-    int c = timed_read();
-    while(c >= 0 && c != terminator) {
-        ret += (char) c;
-        c = timed_read();
-    }
-    return ret;
-}
-
-void extract_doubles(String * str, double* out, uint16_t num_values) {
-    int32_t i = 0, i0 = 0;
-    for(int j = 0; j < num_values; j++) {
-        i0 = str->indexOf(",",i0);
-        i0++;
-        i = str->indexOf(",",i0);
-        if (i < 0) {
-            i = str->length() - 1;
-        }
-        out[j] = str->substring(i0,i).toDouble();
-        i++;
-    }
-}
-
-static void insert_setpoint_buffer(cmd_type_t cmd, String * str, 
-setpoint_t* buffer, SemaphoreHandle_t* mutex, uint16_t num_values) {
-    ESP_LOGD(TAG, "Trying to insert %i setpoints into buffer", num_values);
-    int32_t i = 0, i0 = 0;
-    for(int j = 0; j < num_values; j++) {
-        i0 = str->indexOf(",",i0);
-        i0++;
-        i = str->indexOf(",",i0);
-        if (i < 0) {
-            i = str->length() - 1;
-        }
-
-        auto val = str->substring(i0,i).toDouble();
-        setpoint_t sp = {.pos = 0, .vel = 0, .accel = 0, .torque = 0};
-
-        switch(cmd) {
-            case cmd_type_t::SET_MULTISETPOINT_POSITION :
-                sp.pos = val;
-                break;
-            case cmd_type_t::SET_MULTISETPOINT_VELOCITY:
-                sp.vel = val;
-                break;
-            case cmd_type_t::SET_MULTISETPOINT_ACCELERATION:
-                sp.accel = val;
-                break;
-            case cmd_type_t::SET_MULTISETPOINT_TORQUE:
-                sp.torque = val;
-                break;
-            default:
-                return;
-        }
-        xSemaphoreTake(*mutex, portMAX_DELAY);
-        buffer[i] = sp;
-        xSemaphoreGive(*mutex);
-        i++;
-    }
 }
 
 void reset_sent_count() {
@@ -327,39 +251,24 @@ void reset_sent_count() {
 /*                      P R I V A T E  F U N C T I O N S                      */
 /******************************************************************************/
 
-uint16_t extract_cs_strings(String * str, String *out) {
+uint16_t extract_cs_strings(std::string* str, std::string *out) {
     int32_t i = 0, i0 = 0;
     uint16_t num = 0;
-    char buffer[100];
     for(int j = 0; j < MAX_ELEMENTS; j++) {
-        i0 = str->indexOf(",",i0);
+        i0 = str->find(",", i0);
         i0++;
-        i = str->indexOf(",",i0);
+        i = str->find(",", i0);
         if (i < 0) {
             i = str->length() - 1;
             break;
         }
-        out[j] = str->substring(i0,i);
-        out[j].toCharArray(buffer, 100);
-
+        out[j] = str->substr(i0,i-i0);
+        auto buff = out[j].c_str();
         //verbose log, only compiles if build flag is set
-        ESP_LOGD(TAG, "Extracted substring %s", buffer);
+        ESP_LOGD(TAG, "Extracted substring %s", buff);
 
         num++;
-        vTaskDelay(1);
     }
 
     return num;
-}
-
-static char timed_read(){
-    char c;
-    uint32_t start = micros();
-    do {
-        c = Serial.read();
-        if(c >= 0) {
-            return c;
-        }
-    } while(micros() - start < READ_TIMEOUT_US);
-    return -1;     // -1 indicates timeout
 }
