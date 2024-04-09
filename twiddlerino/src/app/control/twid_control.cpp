@@ -309,6 +309,8 @@ static void pid_callback(void *args)
                 setpoint_signal = admittance_torque_output_admit * (1 - transition_factor_admit) + (transition_factor_admit) * impedance_setpoint_signal_admit;
                 feedback_signal = ctrl->telem.current;        
             }
+            setpoint_signal = impedance_setpoint_signal_admit;
+            feedback_signal = ctrl->telem.current; 
             break;
            
         case control_type_t::IMPED_TO_ADMIT:
@@ -331,6 +333,8 @@ static void pid_callback(void *args)
                 setpoint_signal = admittance_torque_output_imped * (1 - transition_factor_imped) + (transition_factor_imped) * impedance_setpoint_signal_imped;
                 feedback_signal = ctrl->telem.current;        
             }
+            setpoint_signal = admittance_torque_output_imped;
+            feedback_signal = ctrl->telem.current;   
             break;
 
         default:
