@@ -304,8 +304,8 @@ static void pid_callback(void *args)
             double admittance_torque_output_admit;
             admittance_torque_output_admit = (ctrl->telem.torque_external/ctrl->config.impedance.K + ctrl->setpoint.pos) * (ctrl->config.Kp);
 
-            while ((micros()-ctrl->start_admittance_switch) <= 1) {
-                transition_factor_admit = 1.0 / ((micros()-ctrl->start_admittance_switch) * 1.0);
+            while ((micros()-ctrl->start_admittance_switch) <= 5) {
+                transition_factor_admit = 1.0 / 5*((micros()-ctrl->start_admittance_switch));
                 setpoint_signal = admittance_torque_output_admit * (1 - transition_factor_admit) + (transition_factor_admit) * impedance_setpoint_signal_admit;
                 feedback_signal = ctrl->telem.current;        
             }
@@ -328,8 +328,8 @@ static void pid_callback(void *args)
             double admittance_torque_output_imped;
             admittance_torque_output_imped = (ctrl->telem.torque_external/ctrl->config.impedance.K + ctrl->setpoint.pos) * (ctrl->config.Kp);
 
-            while ((micros()-ctrl->start_impedance_switch) <= 1) {
-                transition_factor_imped = 1 - (1.0 / ((micros()-ctrl->start_impedance_switch) * 1.0));
+            while ((micros()-ctrl->start_impedance_switch) <= 5) {
+                transition_factor_imped = 1 - 1.0 / 5*((micros()-ctrl->start_admittance_switch));
                 setpoint_signal = admittance_torque_output_imped * (1 - transition_factor_imped) + (transition_factor_imped) * impedance_setpoint_signal_imped;
                 feedback_signal = ctrl->telem.current;        
             }
