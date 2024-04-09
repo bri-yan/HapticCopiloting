@@ -24,7 +24,7 @@ import pandas
 import os
 
 ###SERIAL CONFIGURATION for esp32
-SERIAL_PORT = 'COM4'
+SERIAL_PORT = '/dev/cu.Bluetooth-Incoming-Port'
 
 #MOTOR EMPIRCAL PARAMS
 

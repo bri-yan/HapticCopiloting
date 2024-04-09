@@ -11,7 +11,7 @@ import serial_asyncio
 from serial_interface.serial_interface import TwidSerialInterfaceProtocol, TelemetryFrame, run_test, ControlType, CommandType
 
 ###SERIAL CONFIGURATION for esp32
-SERIAL_PORT = 'COM9'
+SERIAL_PORT = '/dev/cu.Bluetooth-Incoming-Port'
 
 async def reboot_test(twid:TwidSerialInterfaceProtocol):
     await twid.update_telem_sample_rate(20)

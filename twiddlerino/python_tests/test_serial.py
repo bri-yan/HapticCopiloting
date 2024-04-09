@@ -11,7 +11,7 @@ import serial_asyncio
 from serial_interface.serial_interface import TwidSerialInterfaceProtocol, TelemetryFrame, run_test, ControlType, CommandType, TwidID
 
 ###SERIAL CONFIGURATION for esp32
-SERIAL_PORT = 'COM9'
+SERIAL_PORT = '/dev/cu.Bluetooth-Incoming-Port'
 
 async def serial_test(twid:TwidSerialInterfaceProtocol):
     tid = TwidID.TWID1_ID

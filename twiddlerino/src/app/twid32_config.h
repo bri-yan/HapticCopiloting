@@ -65,7 +65,7 @@
     .velocity_filter_const = 0.01,\
     .current_filter_const = 0.1,\
     .motor_Kv = 2E-5, .motor_Ke = 0.009901879421645426, .motor_J = 1e-6,\
-    .impedance = {.K = 1e-3, .B = 0.01, .J = 1e-6, TF=1},\
+    .impedance = {.K = 1e-3, .B = 0.01, .J = 1e-6},\
     .output_hlim = MOTOR_DUTY_CYCLE_RES, .output_llim = -MOTOR_DUTY_CYCLE_RES,\
     .telemetry_sample_rate = TELEMETRY_DEFAULT_SAMPLE_RATE,\
 }
