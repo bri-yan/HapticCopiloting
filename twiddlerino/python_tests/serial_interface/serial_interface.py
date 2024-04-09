@@ -1,4 +1,4 @@
-# serial_interface.py v3.0
+# serial_interface.py v3.1
 #   A python serial based protocol with an esp32 for a haptic virtual environment
 #   Also shares telemetry data over tcp socket - this can be accessed by other GUI software such as serial studio
 #
@@ -43,9 +43,10 @@ _LOG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)),'logs')
 if not os.path.exists(_LOG_DIR):
     os.mkdir(_LOG_DIR)
 
-_LOG_FILE = os.path.join(_LOG_DIR, f'{_LOG_NAME}_{time.strftime('%Y-%m-%d_%H-%M')}.log')
-_TELEM_LOG_FILE = os.path.join(_LOG_DIR, f'telemetry_frame_{time.strftime('%Y-%m-%d_%H-%M')}.log')
-_SERIALDEBUG_LOG_FILE = os.path.join(_LOG_DIR, f'serial_debug_dump_{time.strftime('%Y-%m-%d_%H-%M')}.log')      
+time_str = time.strftime('%Y-%m-%d_%H')
+_LOG_FILE = os.path.join(_LOG_DIR, f'{_LOG_NAME}_{time_str}.log')
+_TELEM_LOG_FILE = os.path.join(_LOG_DIR, f'telemetry_frame_{time_str}.log')
+_SERIALDEBUG_LOG_FILE = os.path.join(_LOG_DIR, f'serial_debug_dump_{time_str}.log')      
 
 #python copy of control_type_t in esp32 firmware
 class ControlType(Enum):
@@ -150,6 +151,12 @@ class TelemetryFrame:
     control_type:ControlType= ControlType(ControlType.NO_CTRL)
     twid_id:TwidID = None
 
+@dataclass
+class CommandFrame:
+    twid_id:TwidID = TwidID.TWID1_ID
+    cmd_type:CommandType = CommandType.NA_CMD
+    cmd_bytes:bytes = b''
+
 #serial async protocol for interfacing with the twiddlerino
 class TwidSerialInterfaceProtocol(asyncio.Protocol):
     
@@ -220,6 +227,7 @@ class TwidSerialInterfaceProtocol(asyncio.Protocol):
         self._frame_queues = {TwidID.TWID1_ID:queue.Queue(100000), TwidID.TWID2_ID:queue.Queue(100000)}
 
         self.socket_write_buffer:queue.Queue = queue.Queue(1000)
+        self.command_buffer = queue.Queue(1000)
 
         self.frame_count = 0
         self.err_frame_count = 0
@@ -530,11 +538,13 @@ class TwidSerialInterfaceProtocol(asyncio.Protocol):
     
     async def game_update_setpoint(self,twid_id:TwidID, position:float=0, velocity:float=0, accel:float=0, torque:float=0):
         cmd = bytes(f'set_setpoint,{position},{velocity},{accel},{torque},\n',"utf-8")
-        return await self.send_cmd(cmd, CommandType.SET_SETPOINT, twid_id, blocking=False)
+        self.command_buffer.put(CommandFrame(twid_id, CommandType.SET_SETPOINT, cmd))
+        # return await self.send_cmd(cmd, CommandType.SET_SETPOINT, twid_id, blocking=False)
         
     async def game_update_impedance(self,twid_id:TwidID, K :float=0, B :float=0, J :float= 0):
         cmd = bytes(f'set_impedance,{K},{B},{J},\n',"utf-8")
-        return await self.send_cmd(cmd, CommandType.SET_IMPEDANCE, twid_id, blocking=False)
+        self.command_buffer.put(CommandFrame(twid_id, CommandType.SET_IMPEDANCE, cmd))
+        # return await self.send_cmd(cmd, CommandType.SET_IMPEDANCE, twid_id, blocking=False)
 
     # async def update_pos_setpoint_mulitple(self, sp:list[float]):
     #     return await self.send_cmd(bytes(f'set_multisetpoint,position,{len(sp)},{','.join(map(str, sp))},\n',"utf-8"), CommandType.SET_MULTISETPOINT_POSITION, timeout=100)
@@ -549,6 +559,7 @@ class TwidSerialInterfaceProtocol(asyncio.Protocol):
     #     return await self.send_cmd(bytes(f'set_multisetpoint,torque,{len(sp)},{','.join(map(str, sp))},\n',"utf-8"), CommandType.SET_MULTISETPOINT_TORQUE)
 
 async def run_socket_server_async(twid:TwidSerialInterfaceProtocol, delay=0):
+    
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server.bind((SERIAL_STUDIO_HOST, SERIAL_STUDIO_PORT))
     server.listen(1)
@@ -586,6 +597,19 @@ async def run_socket_server_async(twid:TwidSerialInterfaceProtocol, delay=0):
         client.close()
     server.close()
     twid._logger.debug('[socket_server] Socket closed.')
+
+async def run_command_executor(twid:TwidSerialInterfaceProtocol):
+    twid._logger.debug('[command_executor] started coroutine')
+    if not twid._stop_flag.is_set():
+        if not twid.command_buffer.empty():
+            cmd_frame:CommandFrame = twid.command_buffer.get()
+            res = await twid.send_cmd(cmd_frame.cmd_bytes, cmd_frame.cmd_type, cmd_frame.twid_id)
+            if not res:
+                twid._logger.debug(f'[command_executor] cmd frame failed:{cmd_frame}')
+    else:
+        twid._logger.debug('[command_executor] coroutine finished.')
+        return
+    twid._loop.call_soon(run_command_executor, twid)
     
 async def start_protocol(loop, serial_port, baud_rate) -> TwidSerialInterfaceProtocol:
     _, twid = await serial_asyncio.create_serial_connection(loop, TwidSerialInterfaceProtocol, serial_port, baudrate=baud_rate)
@@ -624,4 +648,4 @@ def run_test(serial_port, *args):
     loop = asyncio.get_event_loop()
     twid = loop.run_until_complete(start_protocol(loop,serial_port,SERIAL_BAUD_RATE))
     twid._logger.info(f'running functions test(s):\t {[arg.__name__ for arg in args]}')
-    loop.run_until_complete(asyncio.gather(run_socket_server_async(twid), *[arg(twid) for arg in args]))
+    loop.run_until_complete(asyncio.gather(run_socket_server_async(twid), run_command_executor(twid),  *[arg(twid) for arg in args]))
