@@ -13,7 +13,7 @@ Authors:
 - twiddlerino: source code for the ESP32 controller, python serial interface, unit tests and test scripts
 - sim: MATLAB source code for modelling and simualtion of motor, sensors and controller
 - virtual_demos : directory containing virtual demonstrations for shared control, demos implemented in pygame and interface with esp32 controller using the serial interface
-- pcb: KiCad pcb project (schematics and layout) for the twiddlerino hardware
+- electrical: KiCad pcb project (libraries, schematics and layout) using the twiddlerino hardware, and the KiCad electrical schematic for the test bench
 
 ## Contents
  - [Project Overview](#project-overview) 

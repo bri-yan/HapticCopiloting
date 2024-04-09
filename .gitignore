@@ -7,6 +7,9 @@ env
 # Windows default autosave extension
 *.asv
 
+# macOS Finder metadata
+*.DS_Store
+
 # OSX / *nix default autosave extension
 *.m~
 
