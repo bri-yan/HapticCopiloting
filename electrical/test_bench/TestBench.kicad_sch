@@ -4,6 +4,13 @@
 
   (paper "A4")
 
+  (title_block
+    (title "ENPH 459 Dual Twiddlerino Test Bench Schematic")
+    (date "2024-04-08")
+    (rev "1.1")
+    (company "ENPH 459 Project Lab - Project 2402")
+  )
+
   (lib_symbols
     (symbol "BOB-12009:BOB-12009" (pin_names (offset 1.016)) (in_bom yes) (on_board yes)
       (property "Reference" "U" (id 0) (at -12.7 11.43 0)
