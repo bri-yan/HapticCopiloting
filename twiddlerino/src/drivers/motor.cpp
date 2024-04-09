@@ -101,12 +101,15 @@ motor_state_t motor_set_state(motor_driver_context_t* mctx, motor_state_t state)
    switch(state)
    {
      case motor_state_t::MOTOR_DRIVE_CCW:
+       mctx->state = state;
        digitalWrite(mctx->dir_pin, HIGH);
        break;
      case motor_state_t::MOTOR_DRIVE_CW:
+        mctx->state = state;
         digitalWrite(mctx->dir_pin, LOW);
        break;
      case motor_state_t::MOTOR_LOW:
+        mctx->state = state;
         digitalWrite(mctx->dir_pin, LOW);
         ledcWrite(mctx->pwm_channel, 0);
         break;

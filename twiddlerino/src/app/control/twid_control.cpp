@@ -191,14 +191,14 @@ static void pid_callback(void *args)
     ctrl->telem.velocity = ((ctrl->telem.position - ctrl->last_pos)/(ctrl->config.sample_time_us*1e-6)) * DEGS_TO_RPM;
     ctrl->last_pos = ctrl->telem.position;
 
-    motor_safety_check(&motor1_handle, ctrl->telem.filtered_velocity);
+    motor_safety_check(ctrl->motor_handle, ctrl->telem.filtered_velocity);
 
     ctrl->telem.filtered_velocity = ctrl->velocity_filt_ewa(ctrl->telem.velocity);
 
     //calculate torque
     ctrl->telem.torque_net = ctrl->config.motor_Ke * ctrl->telem.filtered_current;
-    ctrl->telem.torque_control = ctrl->config.motor_Ke * lookup_exp_current((double)motor_get_duty_cycle(&motor1_handle)); //controller_config.motor_Kv * telem.filtered_velocity;
-    if (motor_get_state(&motor1_handle) == motor_state_t::MOTOR_DRIVE_CCW) {
+    ctrl->telem.torque_control = ctrl->config.motor_Ke * lookup_exp_current((double)motor_get_duty_cycle(ctrl->motor_handle)); //controller_config.motor_Kv * telem.filtered_velocity;
+    if (motor_get_state(ctrl->motor_handle) == motor_state_t::MOTOR_DRIVE_CCW) {
         ctrl->telem.torque_control *= -1;
     }
     ctrl->telem.torque_external = ctrl->telem.torque_net - ctrl->telem.torque_control;
